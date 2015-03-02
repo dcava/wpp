@@ -1,0 +1,52 @@
+* Workplace portfolio project proposal
+
+* David Cavallucci
+
+* Title:
+
+** Long term survival in Laparoscopic vs Open resection for colorectal liver metastases: Inverse probability of treatment weighting using propensity scores.
+
+* Authors:
+J Lewin, N O’Rourke, A Chiow, R Bryant, I Martin, L Nathanson, D Cavallucci
+
+** Abstract:
+
+**** Background
+This study compares long-term outcomes between intention-to-treat laparoscopic and open approaches to colorectal liver metastases (CLM), using inverse probability of treatment weighting (IPTW) to control for selection bias.
+
+**** Method
+Patients undergoing liver resection for CLM by 6 surgeons at 3 institutions from 2000 to early 2014 were analysed. IPTW based on propensity scores were generated and used to assess the marginal treatment effect of the laparoscopic approach via a weighted Cox proportional hazards model.
+
+**** Results
+A total of 299 operations were performed in 256 patients. After IPTW, the population was well balanced. 152 laparoscopic procedures were performed in 142 patients, with weighted 5-year overall survival (OS) and recurrence-free survival (RFS) of 64% and 40% respectively. In the open group, 147 procedures were performed in 114 patients, with a weighted 5-year OS and RFS of 59% and 40% respectively. The hazard ratios for OS and RFS for the laparoscopic approach were 1.02 (95% CI 0.59-1.75) and 0.95 (95% CI 0.66-1.38). Median follow-up was 34 months.
+
+**** Conclusion
+In the Brisbane experience, after accounting for bias in treatment assignment, long term survival after LLR for CLM is equivalent to outcomes in open surgery.
+
+
+* Proposal:
+
+To satisfy the requirements of the WPP I propose to complete the above scientific manuscript on which I have been the supervising author and biostatistician and provide a detailed appendix detailing the statistical methodology. I also aim to provide the appendix in a form that would allow for "reproducible research" - that is a format that would allow the reader to reproduce all results and figures presented in the paper.
+
+* Background:
+
+In the field of surgery, evaluating and comparing treatments via the gold standard of a randomised controlled trial is not always feasible. Comparing laparoscopic ("keyhole" or "minimally invasive" surgery) with standard open surgery is particularly challenging due to difficulties with blinding and, in many cases, a perceived lack of equipoise.
+
+Unfortunately, the result is that we are often faced with multiple, usually small (< 100 patients) observational cohort trials. These are plagued with selection bias, as early in the development of new surgical procedures "ideal" patients are selected to minimise the difficulty of the operation. This generally leads to a gross overestimate of treatment effect for the new procedure in early trials. With the passage of time and gaining of experience, the patient populations generally approach each other and the estimate of effect size becomes more reliable. Meta-analysis of these trials can be helpful, but does little to ensure that treatment and control groups don't differ in a systematic way.
+
+This is the current state of affairs with laparoscopic liver surgery. The technique has been in use for approximately 20 years and whilst not "widespread", it is a commonly used technique among specialist liver surgeons. These sub-specialists who perform this surgery on a regular basis, point to the multitude of observational trials showing safety and comparative oncological efficacy (as measured by disease free and overall survival). Indeed, most surgeons utilising the technique would quote a significant improvement in peri-operative outcomes (such as shorter hospital stay, reduced blood loss, pain and wound complications). Among the wider surgical community concerns remain regarding the lack of robust comparative trials that would provide confidence that patient safety and oncological outcomes are not compromised.
+
+In the absence of an RCT, techniques are available that can reduce the impact of observable sources of bias. Propensity score techniques have been used in the social sciences for many years, but are not widely used or understood in the surgical literature. Naive matching is commonly used, but rarely effective. There are a variety of methods whereby the propensity score can be used to estimate treatment effects: matching, stratification, covariate adjustment and inverse probability of treatment weighting (IPTW).
+
+IPTW was selected as the method of choice in this analysis for the following reasons.
+
+1. Of the four methods above, IPTW and matching appear eliminate the greater proportion of differences in baseline characteristics (Austin).
+
+2. In survival analysis, IPTW can be combined with an inverse probability of censoring weights to investigate and balance censoring differences.
+
+3. IPTW provides a probability of observing a complete data unit - ie it accounts for missing data which is a common problem in observational data sets.
+
+4. Software for the implementation of IPTW techniques are available for the R programming language.
+
+
+The use of IPTW using propensity scores should provide balance in baseline characteristics between the laparoscopic (treatment) group and the open (control) group allowing for a more robust comparison of peri-operative and survival outcomes.
