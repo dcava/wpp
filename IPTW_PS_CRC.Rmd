@@ -1,0 +1,572 @@
+---
+title: "IPTW_PS_CRC"
+author: "David Cavallucci"
+date: "26 March 2015"
+output: html_document
+---
+
+#Load libraries
+```{r}
+
+library(gdata)
+library(readxl)
+library(readr)
+library(ggplot2)
+library(survival)
+library(lubridate)
+library(mice)
+source("scripts/stable.weights.R")
+library(twang)
+#library(mi)
+library(dplyr)
+library(tidyr)
+library(magrittr)
+#library(grid)
+#library(gridExtra)
+#library(survey)
+
+#crc <- read_csv("dataset_firstrev.csv")
+
+```
+
+```{r}
+#CRC cleanup
+#crc[,1] <- NULL
+#crc$sex <- as.factor(crc$sex)
+```
+
+# Data import and cleanup
+
+```{r}
+#Init data and cleanup
+raw <- read_excel("Raw data/Lap vs Open - final data set.xlsx")
+
+new <- raw %>% arrange(id_patients, opdate) %>% group_by(id_patients)
+
+#Remove those with no survival values - there were no ontable deaths
+new <- new %>% filter(os_value!=0.0)
+
+#Let the primary data extend through all with multiple ops
+new <- new %>% group_by(id_patients) %>% mutate(
+  primaryresectiondate=first(primaryresectiondate),
+  primarydiagnosisdate=first(primarydiagnosisdate),
+  primaryT=first(primaryT),
+  primaryN=first(primaryN),
+  primaryM=first(primaryM),
+  primarysite=first(primarysite),
+  primaryprocedure=first(primaryprocedure),
+  primarysynchronousliverdisease=first(primarysynchronousliverdisease),
+  primarytreatment=first(primarytreatment),
+  primarydiagnosisdate=first(primarydiagnosisdate),
+  primarytumourgrade=first(primarytumourgrade))
+
+#Fix some NA-zero issues, the NA surgery are all open - checked with surgeon
+new$isnonanatomic <- NAToUnknown(new$isnonanatomic, 0)
+new$surgicalapproach <- NAToUnknown(new$surgicalapproach, "")
+new[new$surgicalapproach=="","surgicalapproach"] = "open"
+new[new$surgicalapproach=="1", "surgicalapproach"] = "open"
+new[is.na(new$isconversion), "islaparoscopicintent"] = 0
+new[is.na(new$isconversion), "isconversion"] = 0
+
+#fix the Card "non-operation"
+new <- new %>% mutate(index=1:n())
+new %<>% filter(!(surname=="Card"&index==2))
+
+# Selected columns
+new %<>% select(firstname,surname,liverprocs,opdate,surgicalapproach,surgeon,age,bloodloss,bpipre_total,bpipost_total,CEA,clinicalscenario,CRS_total,hlos,id_patients,isanatomic,isbilateral,isconversion,isextended,islaparoscopicintent,ismajor,lesioncount,lesionmaxdiameter,lesionseg1,lesionseg2,lesionseg3,lesionseg4,lesionseg5,lesionseg6,lesionseg7,lesionseg8,lesionstotalvolume,margin,oo,optime,os_outcome,os_value,pdfs_outcome,pdfs_value,previousliverresection,primarydiagnosisdate,primaryresectiondate,primaryT,primaryN,primaryM,primarysite,primaryprocedure,primarysynchronousliverdisease,primarytreatment,primarytumourgrade,extrahepaticdiseasesites,sex)
+
+
+# Clarify status
+new$status[new$oo=="no residual disease"] <- "nrd"
+new$status[new$oo=="no evidence of disease"] <- "nrd"
+new$status[new$oo=="evidence of disease"] <- "resdis"
+new$status[new$oo=="resectable residual disease"] <- "resdis"
+new$status[new$oo=="residual disease"] <- "resdis"
+new$status[new$oo=="unresectable residual disease"] <- "unresect"
+new$status[new$oo==""] <- NA
+new$status <- as.factor(new$status)
+
+#New variables
+new %<>% mutate(rec_gap = pdfs_value)
+new %<>% mutate(diff_ops = c(0, diff(opdate)))
+new <- new %>% do(mutate(., rec_gap = ifelse(rec_gap > lead(diff_ops, 1, 0), lead(diff_ops), rec_gap)))
+new <- new %>% do(mutate(., rec_gap = ifelse(is.na(rec_gap), pdfs_value, rec_gap)))
+new <- new %>% mutate(cens_time = first(os_value))
+new <- new %>% do(mutate(., rec_gap = ifelse(is.na(rec_gap), cens_time, rec_gap)))
+
+new <- new %>% mutate(index=1:n())
+new <- new %>% mutate(time = cumsum(diff_ops))
+new <- new %>% mutate(rtime = time+rec_gap)
+new <- new %>% mutate(lap = islaparoscopicintent)
+new <- new %>% mutate(cens = os_outcome, rec = pdfs_outcome)
+new <- new %>% mutate(bins = ifelse(rank(index)<max(rank(index)),1,2))
+
+new <- ungroup(new) %>% mutate(rec = ifelse(pdfs_value==os_value,0,rec))
+new <- new %>% mutate(rec = ifelse(status=="resdis"|status=="unresect", 0, rec))
+
+new <- new %>% group_by(id_patients) %>% mutate(ctime = ifelse(index<max(index),rtime,cens_time))
+
+new %<>% mutate(cens_month = round(cens_time/365.25*12, digits = 1), pdfs_month = round(pdfs_value/365.25*12, digits = 1))
+
+new %<>% mutate(posmarg = ifelse(margin<=1,1,0))
+
+#Combine primaryT - too few T1s leading to instability
+new %<>% mutate(tstage = ifelse(primaryT %in% c(1,2),2,ifelse(primaryT==3,3,ifelse(primaryT==4,4,NA))))
+
+#fix sex
+new$sex <- as.factor(new$sex)
+new$primarytumourgrade <- as.factor(new$primarytumourgrade)
+
+#Fix bpi's - if CEA, primarytumourgrade, primaryN is missing, probably not reliable
+
+new$bpi <- new$bpipre_total
+new$bpi[is.na(new$primaryN)] <- NA
+new$bpi[is.na(new$primarytumourgrade)] <- NA
+new$bpi[is.na(new$CEA)] <- NA
+
+#correct the few data entry errors
+new[new$id_patients==339,"status"] <- "nrd"
+new[new$id_patients==339,"rec"] <- 0
+new[new$id_patients==350,][2,"status"] <- "nrd"
+new[new$id_patients==350,][2,"rec"] <- 0
+new[new$id_patients==398,"status"] <- "nrd"
+new[new$id_patients==398,"rec"] <- 0
+new[new$id_patients==434,][1,"status"] <- "resdis"
+new[new$id_patients==560,"status"] <- "nrd"
+new[new$id_patients==560,"rec"] <- 0
+new[new$id_patients==599,"status"] <- "nrd"
+new[new$id_patients==599,"rec"] <- 0
+new[new$id_patients==606,"status"] <- "nrd"
+new[new$id_patients==606,"rec"] <- 0
+new[new$id_patients==395,"rec"] <- 0
+new[new$id_patients==434,"rec"] <- 1
+
+
+# TWO STAGES!
+id_twostage = c(7,38, 41, 350, 415, 425, 517)
+new %<>% filter(!(id_patients %in% id_twostage))
+
+
+#from missing pdfs values
+new %<>% mutate(rtime = ifelse(rtime > cens_time, cens_time, rtime))
+new %<>% mutate(rtime = ifelse((id_patients %in% c(7,29,452) & index==1), lead(time),rtime))
+
+#primary survival
+new$days_primary <- round(here() - new$primaryresectiondate)
+new$primary_to_op <- difftime(new$opdate, new$primaryresectiondate, units="days")
+new$primary_to_op <- as.numeric(new$primary_to_op)
+new$year_primary <- car::Recode(new$primary_to_op, "-5000:0='0'; 0:365='1'; 366:730='2'; 731:1095='3'; 1096:1460='4'; 1461:4500='5'", as.factor.result=T)
+
+#need to check 4 negative times - likely synch ops
+
+#add difloc
+new[grepl("lesionseg", names(new))] <- lapply(new[grepl("lesionseg", names(new))], as.factor)
+dif_segs <- c("lesionseg1", "lesionseg8", "lesionseg7")
+new %<>% mutate(difsum = (as.numeric(lesionseg1)-1) + (as.numeric(lesionseg7)-1) + (as.numeric(lesionseg8)-1), difloc = ifelse(difsum>0,1,0))
+new$difloc[grepl("tumorectomy 4a", new$liverprocs)] <- 1
+
+#add ehd
+new %<>% mutate(ehd = !is.na(extrahepaticdiseasesites))
+new$ehd <- as.factor(new$ehd)
+
+#add lap strata
+new %<>% group_by(id_patients) %>% 
+  mutate(lap1 = ifelse(index==1&lap==1,1,0), 
+         lap2 = ifelse(index==2&lap==1,1,0), 
+         lap3 = ifelse(index==3&lap==1,1,0), 
+         lap4 = ifelse(index==4&lap==1,1,0), 
+         numlap = sum(lap))
+
+```
+
+
+#Factor vars
+```{r}
+#Change some chr's to factors
+fac_vars <- c("ismajor", "isbilateral", "primaryT", "primaryN", "status", "sex", "index", "tstage", "difloc", "isconversion")
+new[fac_vars] <- lapply(new[fac_vars], as.factor)
+```
+
+
+#Demographics on original data
+```{r}
+
+#Summarise distinct patient numbers and total procedure numbers by surgical approach
+new %>% group_by(lap) %>% summarise(patients=n_distinct(id_patients), procedures=n())
+
+#Single ops
+new %>% group_by(id_patients) %>% filter(n()==1) %>% nrow()
+#multiples
+new %>% group_by(id_patients) %>% filter(n()>1) %>% tally() %>% nrow()
+
+#Conversions
+new %>% group_by(lap, isconversion) %>% tally()
+
+#Procedures
+new %>% group_by(lap, surgicalapproach) %>% tally()
+
+#filter procedure type with grep eg below will select only tumorectomy
+new %>% filter(!grepl("hepatectomy", liverprocs), !grepl("left lateral", liverprocs), !grepl("segmentectomy", liverprocs)) %>% group_by(lap)
+```
+
+
+```{r}
+#set.seed(54321)
+#multiple imputation for lesions
+# subset only used vars
+#new$primaryT <- as.factor(new$primaryT)
+new$primaryT <- car::Recode(new$primaryT, "1:2='2'", as.factor.result=TRUE)
+new$primaryN <- as.factor(new$primaryN)
+new$primaryM <- as.factor(new$primaryM)
+new$primarytreatment <- as.factor(new$primarytreatment)
+
+#Split into just chemo/no chemo - not important otherwise?
+new %>% mutate(ptr = ifelse(grepl("chemo", primarytreatment),"yes","no")) -> new
+new$ptr[is.na(new$primarytreatment)] <- NA
+new$primarytreatment <- new$ptr
+new$primarytreatment <- as.factor(new$primarytreatment)
+
+
+#added primarytreatment - maybe should come out
+
+subnew <- new %>% select(age,bloodloss,CEA,hlos,id_patients,isanatomic,isbilateral,isconversion,isextended,ismajor,lesioncount,lesionmaxdiameter, margin,primaryT,primaryN,primaryM,primarytumourgrade,primarytreatment, year_primary,sex, lap, cens_time, cens, index, difloc,cens_month,time,rtime,rec, optime, numlap, ctime)
+
+```
+
+
+#Run imputation and PS
+```{r}
+output <- vector("list")
+imps <- vector("list")
+pb <- txtProgressBar(min = 0, max = 4, style = 3)
+
+for (j in 1:4) {
+  imptmp <- mice(as.data.frame(subnew), method="cart")
+  imptmp2 <- complete(imptmp, "long", include = TRUE)
+  imptmp2 %<>% group_by(.imp, id_patients) %>% mutate(
+    primaryT=first(primaryT),
+    primaryN=first(primaryN),
+    primarytumourgrade=first(primarytumourgrade),
+    primarytreatment=first(primarytreatment))
+  imptmp2 %<>% ungroup() %>% mutate(posmarg = ifelse(margin<1,1,0))
+  imptmp2$posmarg <- as.factor(imptmp2$posmarg)
+  imptmp2 %>% group_by(id_patients) %>% mutate(cumlap = cumsum(lap)) %>% ungroup() -> imptmp2
+  imps[[paste("impd",j,sep="")]] <- as.mids(as.data.frame(imptmp2))
+  rm(imptmp, imptmp2)
+  for(i in 1:5){
+      tmp <- ps(lap~age+sex+CEA+ismajor+difloc+isbilateral+lesionmaxdiameter+lesioncount+primarytumourgrade+primaryT+primaryN+year_primary+primarytreatment, estimand = "ATE", data=complete(imps[[paste("impd",j,sep="")]],i), interaction.depth=2, n.trees = 1000, shrinkage=0.05, verbose=FALSE, bag.fraction = 0.3, stop.method = "ks.max")
+      output[[paste("psate",j,i,sep="")]] <- tmp
+      rm(tmp)
+  }
+  Sys.sleep(0.5)
+  setTxtProgressBar(pb,j)
+  }
+close(pb)
+
+```
+
+#Select imputations and prepare data
+```{r}
+psresults <- vector("list")
+impdata <- vector("list")
+impweights <- vector("list")
+impdata[["psate0"]] <- as.data.frame(subnew)
+for (j in 1:4) {
+  for (i in 1:5) {
+    if (bal.table(output[[paste("psate",j,i,sep="")]])$ks.max.ATE["ismajor","std.eff.sz"]>-0.261) {
+      
+      print(bal.table(output[[paste("psate",j,i,sep="")]])$ks.max.ATE["ismajor",c("tx.mn", "ct.mn","std.eff.sz", "ks.pval","p")])
+      name <- paste("psate",j,i,sep="")
+      psresults[[name]] <- output[[paste("psate",j,i,sep="")]]
+      impdata[[name]] <- complete(imps[[paste("impd",j,sep="")]],i)
+      impweights[[name]] <- stable.weights(output[[paste("psate",j,i,sep="")]], "ks.max")
+    }
+  }
+}
+
+
+#Make a dataframe from the 5 best and average the weights
+ave.wt <- as_data_frame(impweights) %>% rowMeans()
+
+dx.names <- psresults[[1]]$gbm.obj$var.names
+dx.ave.wt <- dx.wts(ave.wt, data=impdata[[2]], vars=dx.names, estimand="ATE", treat.var = "lap")
+bal.dx.ave.wt <- bal.table(dx.ave.wt)
+bal.dx.ave.wt <-  list(unw=bal.dx.ave.wt$unw, wtd=bal.dx.ave.wt[[2]])
+knitr::kable(cbind(round(bal.dx.ave.wt$unw[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2), round(bal.dx.ave.wt$wtd[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2)))
+
+#Start building plots
+plotdata <- as.data.frame(cbind(asam=c(bal.dx.ave.wt$unw$std.eff.sz, bal.dx.ave.wt$wtd$std.eff.sz), wt = rep(c("unw", "wtd"), each=27), vars=rep(rownames(dx.ave.wt$desc$unw$bal.tab$results), times=2)))
+ggplot(plotdata, aes(wt, abs(as.numeric(as.character(asam))), colour=wt, group=vars)) + geom_point() + geom_line()
+
+
+#Make large dataframe
+finaldata <- plyr::rbind.fill(impdata)
+finaldata$index <- car::recode(finaldata$index, '2:4=2')
+finaldata$cumlap <- car::recode(finaldata$cumlap, '2:4=2')
+finaldata$numlap <- car::Recode(finaldata$numlap, '2:4=2')
+finaldata$.imp <- rep(0:5, each=284)
+finaldata$.id <- rep(1:284, times=6)
+finaldata <- finaldata %>% group_by(.imp, id_patients) %>% mutate(ctime = ifelse(index<max(index),rtime,cens_time))
+finaldata$stable.w <- ave.wt
+finaldata[finaldata$.imp==0,]$posmarg <- finaldata[finaldata$.imp==1,]$posmarg
+finaldata[finaldata$.imp==0,]$cumlap <- finaldata[finaldata$.imp==1,]$cumlap
+finaldata %>% mutate(gaptime = rtime-time) -> finaldata
+finaldata %>% group_by(.imp) %>% mutate(mhlos = hlos - mean(hlos, na.rm=T)) -> finaldata
+
+imp.mids <- as.mids(as.data.frame(finaldata), .imp = match(".imp", names(finaldata)), .id=match(".id", names(finaldata)))
+
+#mitools version
+library(mitools)
+mit <- impdata[2:6]
+for (i in 1:5) {
+  mit[[i]]$stable.w <- ave.wt
+  mit[[i]]$index <- car::recode(mit[[i]]$index, '2:4=2')
+  mit[[i]]$cumlap <- car::recode(mit[[i]]$cumlap, '2:4=2')
+  mit[[i]]$numlap <- car::Recode(mit[[i]]$numlap, '2:4=2')
+  mit[[i]] <- mit[[i]] %>% group_by(id_patients) %>% mutate(ctime = ifelse(index<max(index),rtime,cens_time))
+  mit[[i]] %>% mutate(gaptime = rtime-time) -> mit[[i]]
+  mit[[i]] %>% mutate(mhlos = hlos-mean(hlos, na.rm=T)) -> mit[[i]]
+}
+
+midata <- imputationList(mit)
+design.ate <- svydesign(ids = ~id_patients, weights=~stable.w, data=midata)
+design.sing <- svydesign(ids = ~id_patients, weights=~stable.w, data=midata$imputations$psate15)
+
+
+```
+
+
+#Weighted regression
+```{r}
+
+#OS
+doublerobust.full <- with(imp.mids, coxph(Surv(time,ctime,cens)~lap+cluster(id_patients)+ismajor+isbilateral+primaryN+lesioncount, weights = stable.w))
+
+summary(pool(doublerobust.full))
+
+doublerobust.final <- with(imp.mids, coxph(Surv(time,ctime,cens)~lap+cluster(id_patients), weights = stable.w))
+
+summary(pool(doublerobust.final))
+
+#Compare HR for lap
+
+#PDFS - PWP-CT model
+rec_double.full <- with(imp.mids, coxph(Surv(time,rtime,(rec==1|cens==1))~lap+ismajor+isbilateral+primaryN+lesioncount + strata(index), weights = stable.w))
+
+summary(pool(rec_double.full))
+
+rec_double.final <- with(imp.mids, coxph(Surv(gaptime,(rec==1|cens==1))~lap + strata(index), weights = stable.w))
+
+summary(pool(rec_double.final))
+
+
+#OS_multivariate
+doublerobust.mvr  <- with(imp.mids, coxph(Surv(time,ctime,cens)~lap+cluster(id_patients)+ismajor+isbilateral+primaryN+lesioncount+primaryT+bloodloss+mhlos+optime+posmarg, weights = stable.w))
+
+summary(pool(doublerobust.mvr))
+
+########Final multivariate models
+
+os_final <- with(imp.mids, coxph(Surv(time,ctime,cens)~cluster(id_patients)+mhlos+primaryT+lap, weights = stable.w))
+
+summary(pool(os_final))
+
+rec_doublerobust.mvr <- with(imp.mids, coxph(Surv(gaptime,(rec==1|cens==1))~lap+cluster(id_patients)+ismajor+isbilateral+primaryN+lesioncount+primaryT+bloodloss+mhlos+optime+strata(index), weights = stable.w))
+
+summary(pool(rec_doublerobust.mvr))
+
+rfs_final <- with(imp.mids, coxph(Surv(gaptime, (rec==1|cens==1))~cluster(id_patients)+mhlos+primaryT+isbilateral+lap, weights = stable.w))
+
+summary(pool(rfs_final))
+
+os.final.data <- as.data.frame(summary(pool(os_final)))
+os.final.data <- os.final.data %>% select(est, `Pr(>|t|)`, `lo 95`, `hi 95`)
+os.final.data %>% mutate(est=exp(est), `lo 95`=exp(`lo 95`), `hi 95` = exp(`hi 95`)) -> os.final.data
+row.names(os.final.data) <- c("hlos", "T2", "T3", "lap")
+
+
+rfs.final.data <- as.data.frame(summary(pool(rfs_final)))
+rfs.final.data <- rfs.final.data %>% select(est, `Pr(>|t|)`, `lo 95`, `hi 95`)
+rfs.final.data %>% mutate(est=exp(est), `lo 95`=exp(`lo 95`), `hi 95` = exp(`hi 95`)) -> rfs.final.data
+row.names(rfs.final.data) <- c("hlos", "T2", "T3", "isbilateral", "lap")
+
+```
+
+#Weighted stats
+```{r}
+
+#svyby(~bloodloss+hlos, ~lap, design.ate, svyquantile, quantiles=0.5, ci=TRUE, vartype="ci", na.rm=T)
+
+#weighted, pooled, MI data!
+MIcombine(with(design.ate, svyby(~bloodloss+hlos+optime, ~lap,svyquantile, quantiles=0.5, ci=TRUE, vartype = "var")))
+
+#svyranktest(bloodloss~lap, design.ate) Kruskall-wallis
+
+#weighted chi-sq - better to use weighted prop test
+with(design.ate, svytable(~lap + posmarg, Ntotal = 284, round = T))
+
+#unweighted, but imputed posmarg rates:
+with(finaldata[finaldata$.imp==1,], table(margin<1, lap))
+
+summary(MIcombine(with(design.ate, svyby(~posmarg, ~lap, svyciprop, vartype="var"))))
+
+#Pool prop-test estimates:
+X2 <- sum(mapply(function(x) x$statistic, lapply(with(design.ate, svytable(~lap + posmarg, Ntotal = 284, round = T)), prop.test)))/5
+
+pchisq(X2, 1, lower.tail = F) #P-value
+
+#GLM to give odds-ratio and p-val
+summary(pool(with(imp.mids, glm(margin<1~lap, weights=stable.w))))
+
+#svyglm(bloodloss ~ lap, design=design.ate) #gives mean
+
+#svylogrank
+
+#KM survival and follow-up
+#Median follow-up by KMPF (reverse kaplan meier)
+survfit(Surv(cens_month, cens==0)~1, weights = stable.w, finaldata[finaldata$.imp==1,])
+
+#KM survival with lap alone - any dataframe is ok
+survfit(Surv(time,ctime, cens)~lap+cluster(id_patients), weights = stable.w, finaldata[finaldata$.imp==1,])
+
+#5yr OS
+summary(survfit(Surv(time,ctime, cens)~lap, weights = stable.w, finaldata[finaldata$.imp==1,]), times=1826.25)
+
+#Logrank
+svylogrank(Surv(cens_month, cens)~lap, design=design.sing, rho=1)
+
+#RFS strata by index - gaptime is what we want to know - recurrence after each operation
+survfit(Surv(gaptime, (rec==1|cens==1))~lap + strata(index), weights = stable.w, finaldata[finaldata$.imp==1,])
+
+#logrank
+svylogrank(Surv(gaptime, (rec==1|cens==1))~lap+strata(index), design=design.sing, rho=1)
+
+#compare only the >2nd procedures - unweighted, but the numbers are the same
+survdiff(Surv(gaptime, (rec==1|cens==1))~lap, finaldata[finaldata$.imp==1,], subset=index==2)
+```
+
+
+#Old Propensity scores
+```{r}
+#Need to use bag.fraction to improve fit.
+
+ps1 <- ps(lap~age+sex+CEA+ismajor+difloc+isbilateral+lesionmaxdiameter+lesioncount+primarytumourgrade+primaryT+primaryN+year_primary, estimand = "ATE", data=as.data.frame(new), interaction.depth=1, n.trees = 3000, shrinkage=0.05, verbose=FALSE, bag.fraction = 0.5)
+
+psate <- ps(lap~age+sex+CEA+ismajor+difloc+isbilateral+lesionmaxdiameter+lesioncount+primarytumourgrade+primaryT+primaryN+year_primary, estimand = "ATE", data=as.data.frame(new), interaction.depth=2, n.trees = 3000, shrinkage=0.05, verbose=FALSE, bag.fraction = 0.5)
+
+bps.att <- ps(lap~age+sex+CEA+ismajor+difloc+isbilateral+lesionmaxdiameter+lesioncount+primarytumourgrade+primaryT+primaryN, estimand = "ATT", data=as.data.frame(new), interaction.depth=2, n.trees = 3000, shrinkage=0.05, stop.method = "es.mean", verbose=FALSE)
+
+#ps.new.cens <- ps(cens~age+sex+bpipre_total+ismajor+difloc+isbilateral+lesionmaxdiameter+lesioncount+primaryT+primaryN, estimand = "ATE", data=as.data.frame(new), interaction.depth=2, n.trees = 1000, shrinkage=0.01)
+bal.table(ps1)$es.mean.ATE[,c("tx.mn", "ct.mn","std.eff.sz", "ks.pval")]
+bal.table(ps2)$es.mean.ATE[,c("tx.mn", "ct.mn","std.eff.sz", "ks.pval")]
+bal.table(ps3)$es.mean.ATE[,c("tx.mn", "ct.mn","std.eff.sz", "ks.pval")]
+
+bal.table(ps.new)
+plot(ps.new, x)
+
+# Setup up the weights for both and deisgn matrix
+
+new$atew <- get.weights(ps2, stop.method = "es.mean")
+#new$atecens <- get.weights(ps.new.cens, stop.method = "ks.mean")
+#new$finw <- new$atew * new$atecens
+
+new$attw <- get.weights(ps.new.att.id2)
+#new$finattw <- new$attw * new$atecens
+
+design.ate <- svydesign(ids = ~id_patients, weights=~atew, data=new)
+#design.att <- svydesign(ids = ~id_patients, weights=~attw, data=new)
+
+
+```
+
+
+#Direct GBM with CV-folds
+```{r}
+gbmps <- gbm(lap~age+sex+CEA+ismajor+difloc+isbilateral+lesionmaxdiameter+lesioncount+primarytumourgrade+primaryT+primaryN+year_primary, data=new, interaction.depth=3, n.trees = 20000, shrinkage=0.05, verbose=FALSE, cv.folds=5)
+
+gbmate <- predict(gbmps, newdata = new, type = "response")
+
+new %<>% mutate(iptw = ifelse(lap==1,(1/gbmate),(1/(1-gbmate))))
+
+new %<>% mutate(iptw = ifelse(lap==1,(mean(gbmate)/gbmate),(mean(1-gbmate)/(1-gbmate))))
+
+gbmiptw <- dx.wts(new$iptw, as.data.frame(new), "ATE", vars=c("id_patients","lap","age","sex","CEA","ismajor","difloc","isbilateral","lesionmaxdiameter","lesioncount","primaryT","primaryN", "primarytumourgrade", "primary_to_op"), treat.var = "lap", x.as.weights = T)
+
+
+```
+
+#Old imputation and ps
+```{r}
+impd <- mice(subnew, m=2)
+
+#look at the patterns for important vars
+#densityplot(impd, ~primaryT|.imp) 
+
+implong <- complete(impd, action = "long", include = TRUE)
+
+implong %<>% group_by(.imp, id_patients) %>% mutate(
+    primaryT=first(primaryT),
+    primaryN=first(primaryN),
+    primarytumourgrade=first(primarytumourgrade))
+implong %<>% ungroup() %>% mutate(posmarg = ifelse(margin<=1,1,0))
+implong$posmarg <- as.factor(implong$posmarg)
+
+
+
+output <- vector("list")
+pb <- txtProgressBar(min = 0, max = 5, style = 3)
+for(i in 0:5){
+  if (i==0) { 
+    tmp <- ps(lap~age+sex+CEA+ismajor+difloc+isbilateral+lesionmaxdiameter+lesioncount+primarytumourgrade+primaryT+primaryN+year_primary+primarytreatment, estimand = "ATE", data=as.data.frame(impd$data), interaction.depth=2, n.trees = 1000, shrinkage=0.05, verbose=FALSE, bag.fraction = 0.3, stop.method = "ks.max")
+  output[["psate0"]] <- tmp
+    }
+  else {
+   tmp <- ps(lap~age+sex+CEA+ismajor+difloc+isbilateral+lesionmaxdiameter+lesioncount+primarytumourgrade+primaryT+primaryN+year_primary+primarytreatment, estimand = "ATE", data=complete(impd,i), interaction.depth=2, n.trees = 1000, shrinkage=0.05, verbose=FALSE, bag.fraction = 0.3, stop.method = "ks.max")
+   output[[paste("psate",i,sep="")]] <- tmp
+  Sys.sleep(0.5)
+    setTxtProgressBar(pb,i)
+    }
+}
+close(pb)
+
+#find the best balanced
+psresults <- vector("list")
+impdata <- vector("list")
+impweights <- vector("list")
+impdata[["psate0"]] <- impd$data
+  
+for (i in 1:5) {
+  print(bal.table(output[[paste("psate",i,sep="")]])$ks.max.ATE["ismajor",c("tx.mn", "ct.mn","std.eff.sz", "ks.pval","p")])
+    name <- paste("psate",i,sep="")
+    psresults[[name]] <- output[[paste("psate",i,sep="")]]
+    impdata[[name]] <- complete(impd,i)
+    impweights[[name]] <- stable.weights(output[[paste("psate",i,sep="")]], "ks.max")
+  }
+
+
+
+
+```
+
+new %>% group_by(lap,year) %>% tally() -> testgraph
+ggplot(testgraph[-17,], aes(x=year, y=n, fill=as.factor(lap))) + geom_histogram(stat="identity")
+
+
+```{r}
+#mi
+library(mi)
+subnew %>% select(-primaryM) -> mi.data
+mdf <- missing_data.frame(as.data.frame(mi.data))
+mdf <- change(mdf, y= "lesioncount", what = "type", to = "pos")
+mdf <- change(mdf, y= "lesionmaxdiameter", what = "type", to = "pos")
+mdf <- change(mdf, y= "optime", what = "type", to = "pos")
+mdf <- change(mdf, y= "margin", what = "type", to = "non")
+mdf <- change(mdf, y= "hlos", what = "type", to = "pos")
+mdf <- change(mdf, y= "CEA", what = "type", to = "pos")
+mdf <- change(mdf, y= "age", what = "type", to = "pos")
+mdf <- change(mdf, y= "bloodloss", what = "type", to = "con")
+options(mc.cores = 4)
+imputations <- mi(mdf, n.iter=150, n.chains=4)
+
+
+```
