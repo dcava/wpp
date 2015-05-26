@@ -114,8 +114,21 @@ new$days_primary <- round(here() - new$primaryresectiondate)
 new$primary_to_op <- difftime(new$opdate, new$primaryresectiondate, units="days")
 new$primary_to_op <- as.numeric(new$primary_to_op)
 
+#Clean up Primary tumour stuff
 #Years from primary
 new$year_primary <- car::Recode(new$primary_to_op, "-5000:0='0'; 0:365='1'; 366:730='2'; 731:1095='3'; 1096:1460='4'; 1461:4500='5'", as.factor.result=T)
+
+#Recode primaryT into 3 levels only - insufficient T1's to be useful
+new$primaryT <- car::Recode(new$primaryT, "1:2='2'", as.factor.result=TRUE)
+new$primaryN <- as.factor(new$primaryN)
+new$primaryM <- as.factor(new$primaryM)
+new$primarytreatment <- as.factor(new$primarytreatment)
+
+#Split into just chemo/no chemo - not important otherwise?
+new %>% mutate(ptr = ifelse(grepl("chemo", primarytreatment),"yes","no")) -> new
+new$ptr[is.na(new$primarytreatment)] <- NA
+new$primarytreatment <- new$ptr
+new$primarytreatment <- as.factor(new$primarytreatment)
 
 #add difloc
 new[grepl("lesionseg", names(new))] <- lapply(new[grepl("lesionseg", names(new))], as.factor)
@@ -138,3 +151,6 @@ new %<>% group_by(id_patients) %>%
 #posmarg
 new %<>% ungroup() %>% mutate(posmarg = ifelse(!is.na(new$margin),ifelse(new$margin<1,1,0),NA))
 new %<>% mutate(tstage = ifelse(primaryT %in% c(1,2),2,ifelse(primaryT==3,3,ifelse(primaryT==4,4,NA))))
+
+#$Subsetting
+subnew <- new %>% select(age,bloodloss,CEA,hlos,id_patients,isanatomic,isbilateral,isconversion,isextended,ismajor,lesioncount,lesionmaxdiameter, margin,primaryT,primaryN,primaryM,primarytumourgrade,primarytreatment, year_primary,sex, lap, cens_time, cens, index, difloc,cens_month,time,rtime,rec, optime, numlap, ctime)

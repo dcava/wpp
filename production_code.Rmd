@@ -89,4 +89,10 @@ new %>%
   group_by(lap) %>%
   tally()
 
+#Year-by-year histogram
+new$year <- year(new$opdate)
+new$year <- as.factor(new$year)
+new %>% group_by(ismajor,lap,year) %>% tally() -> testgraph
+ggplot(testgraph[-17,], aes(x=year, y=n, fill=interaction(lap,ismajor))) + geom_histogram(stat="identity")
+
 ```
