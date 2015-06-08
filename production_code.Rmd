@@ -53,14 +53,14 @@ new %>%
 str_c("Number of patients with single procedures: ", singlepts)
 str_c("Number of patients with multiple procedures: ", multiplepts)
 
-#Conversions
-new %>% 
-  group_by(lap, isconversion) %>% 
-  tally() -> conversions
+# #Conversions
+# new %>% 
+#   group_by(lap, isconversion) %>% 
+#   tally() -> conversions
+# 
+# kable(conversions[2:3,2:3], col.names = c("Conversion", "n"))
 
-kable(conversions[2:3,2:3], col.names = c("Conversion", "n"))
-
-#Procedures
+#Procedures and conversions
 new %>% 
   group_by(lap, surgicalapproach) %>% 
   tally() -> proc_list
@@ -74,30 +74,32 @@ new %>%
   filter(grepl("hepatectomy", liverprocs)) %>% 
   mutate(side= ifelse(grepl("left", liverprocs), "left hepatectomy", "right hepatectomy")) %>%
   group_by(lap, side) %>%
-  tally()
+  tally() %>% kable()
 
 #Left lateral
 new %>% 
   filter(grepl("left lateral", liverprocs), !grepl("hepatectomy", liverprocs)) %>% 
   group_by(lap) %>%
-  tally()
+  tally() %>% kable()
 
 #Tumorectomy (only)
 new %>% 
   filter(!grepl("hepatectomy", liverprocs), !grepl("left lateral", liverprocs), 
          !grepl("segmentectomy", liverprocs)) %>% 
   group_by(lap) %>%
-  tally()
+  tally() %>% kable()
 
 #Year-by-year histogram
 new$year <- year(new$opdate)
 new$year <- as.factor(new$year)
 new %>% group_by(ismajor,lap,year) %>% tally() -> testgraph
 testgraph %>% filter(as.character(year)>"1999") -> testgraph
-ggplot(testgraph, aes(x=year, y=n, fill=interaction(lap,ismajor))) + geom_histogram(stat="identity") +  scale_fill_brewer(labels=c("open minor", "lap minor", "open major", "lap major"), name="Procedure type")
+ggplot(testgraph, aes(x=year, y=n, fill=interaction(lap,ismajor))) + geom_histogram(stat="identity") +  scale_fill_gdocs(labels=c("open minor", "lap minor", "open major", "lap major"), name="Procedure type") + theme_gdocs()
 
 ```
 
+
+#Imputation
 ```{r}
 imp <- mice(as.data.frame(subnew), method="cart")
 imptmp <- complete(imp, "long", include=TRUE)
@@ -111,5 +113,125 @@ imptmp$posmarg <- as.factor(imptmp$posmarg)
 imptmp %>% group_by(id_patients) %>% mutate(cumlap = cumsum(lap)) %>% ungroup() -> imptmp
 impmids <- as.mids(as.data.frame(imptmp))
 
+
+```
+
+#PS scores
+```{r}
+propscores <- vector("list")
+for(i in 1:5) {
+      tmp <- ps(lap~age+sex+CEA+ismajor+difloc+isbilateral+lesionmaxdiameter+lesioncount+primarytumourgrade+primaryT+primaryN+year_primary+primarytreatment, estimand = "ATE", data=complete(imp,i), interaction.depth=2, n.trees = 1000, shrinkage=0.05, verbose=FALSE, bag.fraction = 0.3, stop.method = "ks.max")
+      propscores[[paste("psate",i,sep="")]] <- tmp
+}
+
+```
+
+
+#Summarise
+```{r}
+psresults <- vector("list")
+impdata <- vector("list")
+impweights <- vector("list")
+impdata[["psate0"]] <- as.data.frame(subnew)
+  for (i in 1:5) {
+      print(bal.table(propscores[[i]])$ks.max.ATE["ismajor",c("tx.mn", "ct.mn","std.eff.sz", "ks.pval","p")])
+      name <- paste("psate",i,sep="")
+      psresults[[name]] <- propscores[[i]]
+      impdata[[name]] <- complete(imp,i)
+      impweights[[name]] <- stable.weights(propscores[[i]], "ks.max")
+  }
+
+```
+
+#Plots and balance
+```{r}
+#Make a dataframe from the 5 best and average the weights
+ave.wt <- as_data_frame(impweights) %>% rowMeans()
+
+dx.names <- psresults[[1]]$gbm.obj$var.names
+dx.ave.wt <- dx.wts(ave.wt, data=impdata[[2]], vars=dx.names, estimand="ATE", treat.var = "lap")
+bal.dx.ave.wt <- bal.table(dx.ave.wt)
+bal.dx.ave.wt <-  list(unw=bal.dx.ave.wt$unw, wtd=bal.dx.ave.wt[[2]])
+knitr::kable(cbind(round(bal.dx.ave.wt$unw[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2), round(bal.dx.ave.wt$wtd[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2)))
+
+#Start building plots
+plotdata <- as.data.frame(cbind(asam=c(bal.dx.ave.wt$unw$std.eff.sz, bal.dx.ave.wt$wtd$std.eff.sz), wt = rep(c("unw", "wtd"), each=27), vars=rep(rownames(dx.ave.wt$desc$unw$bal.tab$results), times=2)))
+ggplot(plotdata, aes(wt, abs(as.numeric(as.character(asam))), colour=wt, group=vars)) + geom_point() + geom_line()
+```
+
+
+
+#Make large dataframe
+```{r}
+finaldata <- plyr::rbind.fill(impdata)
+finaldata$index <- car::recode(finaldata$index, '2:4=2')
+#finaldata$cumlap <- car::recode(finaldata$cumlap, '2:4=2')
+finaldata$numlap <- car::Recode(finaldata$numlap, '2:4=2')
+finaldata$.imp <- rep(0:5, each=284)
+finaldata$.id <- rep(1:284, times=6)
+finaldata <- finaldata %>% group_by(.imp, id_patients) %>% mutate(ctime = ifelse(index<max(index),rtime,cens_time))
+finaldata$stable.w <- ave.wt
+finaldata[finaldata$.imp==0,]$posmarg <- finaldata[finaldata$.imp==1,]$posmarg
+#finaldata[finaldata$.imp==0,]$cumlap <- finaldata[finaldata$.imp==1,]$cumlap
+finaldata %>% mutate(gaptime = rtime-time) -> finaldata
+finaldata %>% group_by(.imp) %>% mutate(mhlos = hlos - mean(hlos, na.rm=T)) -> finaldata
+
+#Final imputed mids
+imp.mids <- as.mids(as.data.frame(finaldata), .imp = match(".imp", names(finaldata)), .id=match(".id", names(finaldata)))
+```
+
+#Weighted regression
+```{r}
+
+#OS
+doublerobust.full <- with(imp.mids, coxph(Surv(time,ctime,cens)~lap+cluster(id_patients)+ismajor+isbilateral+primaryN+lesioncount, weights = stable.w))
+
+summary(pool(doublerobust.full))
+
+doublerobust.final <- with(imp.mids, coxph(Surv(time,ctime,cens)~lap+cluster(id_patients), weights = stable.w))
+
+summary(pool(doublerobust.final))
+
+#Compare HR for lap
+
+#PDFS - PWP-CT model
+rec_double.full <- with(imp.mids, coxph(Surv(time,rtime,(rec==1|cens==1))~lap+ismajor+isbilateral+primaryN+lesioncount + strata(index), weights = stable.w))
+
+summary(pool(rec_double.full))
+
+rec_double.final <- with(imp.mids, coxph(Surv(gaptime,(rec==1|cens==1))~lap + strata(index), weights = stable.w))
+
+summary(pool(rec_double.final))
+
+
+#OS_multivariate
+doublerobust.mvr  <- with(imp.mids, coxph(Surv(time,ctime,cens)~lap+cluster(id_patients)+ismajor+isbilateral+primaryN+lesioncount+primaryT+bloodloss+mhlos+optime+posmarg, weights = stable.w))
+
+summary(pool(doublerobust.mvr))
+
+########Final multivariate models
+
+os_final <- with(imp.mids, coxph(Surv(time,ctime,cens)~cluster(id_patients)+mhlos+primaryT+lap, weights = stable.w))
+
+summary(pool(os_final))
+
+rec_doublerobust.mvr <- with(imp.mids, coxph(Surv(gaptime,(rec==1|cens==1))~lap+cluster(id_patients)+ismajor+isbilateral+primaryN+lesioncount+primaryT+bloodloss+mhlos+optime+strata(index), weights = stable.w))
+
+summary(pool(rec_doublerobust.mvr))
+
+rfs_final <- with(imp.mids, coxph(Surv(gaptime, (rec==1|cens==1))~cluster(id_patients)+mhlos+primaryT+isbilateral+lap, weights = stable.w))
+
+summary(pool(rfs_final))
+
+os.final.data <- as.data.frame(summary(pool(os_final)))
+os.final.data <- os.final.data %>% select(est, `Pr(>|t|)`, `lo 95`, `hi 95`)
+os.final.data %>% mutate(est=exp(est), `lo 95`=exp(`lo 95`), `hi 95` = exp(`hi 95`)) -> os.final.data
+row.names(os.final.data) <- c("hlos", "T2", "T3", "lap")
+
+
+rfs.final.data <- as.data.frame(summary(pool(rfs_final)))
+rfs.final.data <- rfs.final.data %>% select(est, `Pr(>|t|)`, `lo 95`, `hi 95`)
+rfs.final.data %>% mutate(est=exp(est), `lo 95`=exp(`lo 95`), `hi 95` = exp(`hi 95`)) -> rfs.final.data
+row.names(rfs.final.data) <- c("hlos", "T2", "T3", "isbilateral", "lap")
 
 ```

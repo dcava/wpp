@@ -153,4 +153,4 @@ new %<>% ungroup() %>% mutate(posmarg = ifelse(!is.na(new$margin),ifelse(new$mar
 new %<>% mutate(tstage = ifelse(primaryT %in% c(1,2),2,ifelse(primaryT==3,3,ifelse(primaryT==4,4,NA))))
 
 #$Subsetting
-subnew <- new %>% select(age,bloodloss,CEA,hlos,id_patients,isanatomic,isbilateral,isconversion,isextended,ismajor,lesioncount,lesionmaxdiameter, margin,primaryT,primaryN,primaryM,primarytumourgrade,primarytreatment, year_primary,sex, lap, cens_time, cens, index, difloc,cens_month,time,rtime,rec, optime, numlap, ctime)
+subnew <- new %>% select(age,bloodloss,CEA,hlos,id_patients,isanatomic,isbilateral,isconversion,isextended,ismajor,lesioncount,lesionmaxdiameter, margin,primaryT,primaryN,primaryM,primarytumourgrade,primarytreatment, year_primary,sex, lap, cens_time, cens, index, difloc,cens_month,time,rtime,rec, optime, numlap, ctime, posmarg)
