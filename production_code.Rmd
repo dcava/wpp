@@ -93,6 +93,23 @@ new %>%
 new$year <- year(new$opdate)
 new$year <- as.factor(new$year)
 new %>% group_by(ismajor,lap,year) %>% tally() -> testgraph
-ggplot(testgraph[-17,], aes(x=year, y=n, fill=interaction(lap,ismajor))) + geom_histogram(stat="identity")
+testgraph %>% filter(as.character(year)>"1999") -> testgraph
+ggplot(testgraph, aes(x=year, y=n, fill=interaction(lap,ismajor))) + geom_histogram(stat="identity") +  scale_fill_brewer(labels=c("open minor", "lap minor", "open major", "lap major"), name="Procedure type")
+
+```
+
+```{r}
+imp <- mice(as.data.frame(subnew), method="cart")
+imptmp <- complete(imp, "long", include=TRUE)
+imptmp %<>% group_by(.imp, id_patients) %>% mutate(
+    primaryT=first(primaryT),
+    primaryN=first(primaryN),
+    primarytumourgrade=first(primarytumourgrade),
+    primarytreatment=first(primarytreatment))
+imptmp %<>% ungroup() %>% mutate(posmarg = ifelse(margin<1,1,0))
+imptmp$posmarg <- as.factor(imptmp$posmarg)
+imptmp %>% group_by(id_patients) %>% mutate(cumlap = cumsum(lap)) %>% ungroup() -> imptmp
+impmids <- as.mids(as.data.frame(imptmp))
+
 
 ```

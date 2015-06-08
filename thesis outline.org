@@ -9,8 +9,6 @@ This is the current state of affairs with laparoscopic liver surgery. The techni
 
 In the absence of an RCT, techniques are available that can reduce the impact of observable sources of bias. Regression is often used to produce treatment effect estimates. However, if the groups are significantly different in some covariates and there exist interactions and non-linear relationships, these estimates will be biased. Propensity score(PS) techniques have been used in the social sciences for many years, but are not widely used or understood in the surgical literature. PS-based analyses are, however, becoming increasingly popular in the surgical literature due to there ability to remove bias from observed confounders. There are a variety of methods whereby the propensity score can be used to estimate treatment effects: matching, stratification, covariate adjustment and inverse probability of treatment weighting (IPTW).
 
-
-
 Following, we discuss the principles of propensity scores with a focus on IPTW techniques. Various PS estimation techniques are compared and modern techniques such as generalised boosted models are described. 
 
 ** Propensity Scores
@@ -35,10 +33,9 @@ Following, we discuss the principles of propensity scores with a focus on IPTW t
 - Complete case
 - complete variable
 - univariate imputation
-- multiple imputation
-- approaches for dealing with PS/IPTW issues
+- multiple imputation- approaches for dealing with PS/IPTW issues
 - Hill 2004 paper for good summary
-
+  
 ** Analyses with IPTW data
 - survey methods
 - weighted regression/cox
