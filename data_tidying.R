@@ -1,5 +1,5 @@
 #Init data and cleanup
-raw <- read_excel("~/Dropbox/Research/colorectal mets/Raw data/Lap vs Open - final data set.xlsx")
+raw <- read_excel("../../../Research/colorectal mets/Raw data/Lap vs Open - final data set.xlsx")
 
 new <- raw %>% arrange(id_patients, opdate) %>% group_by(id_patients)
 

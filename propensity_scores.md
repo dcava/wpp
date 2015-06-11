@@ -1,13 +1,13 @@
 
 # Propensity scores
 
-The propensity score is the probability of receiving a particular treatment conditional on some set of observed baseline variables. It was originally described by Rosenbaum and Rubin (1983) and is part of the “Potential outcomes framework”. The PS is a balancing score - those patients with the same PS have similar distributions of measured confounders (in this instance, baseline characteristics) given the PS [JCE article](). Therefore, if certain assumptions hold, conditioning on the PS allows the average treatment effect to be estimated. This is a major potential advantage, as estimating causal effects from observational studies with non-equivalent groups is a task often faced by researchers in the surgical community. 
+The propensity score is the probability of receiving a particular treatment conditional on some set of observed baseline variables. It was originally described by Rosenbaum and Rubin (1983) and is part of the “Potential outcomes framework”. The PS is a balancing score - those patients with the same PS have similar distributions of measured confounders (in this instance, baseline, pre-operative characteristics) given the PS [JCE article](). Therefore, if certain assumptions hold, conditioning on the PS allows the average treatment effect to be estimated. This is a major potential advantage, as estimating causal effects from observational studies with non-equivalent groups is a task often faced by researchers in the surgical community. 
 
 The two main assumptions in PS analyses are:
 1. no unmeasured confounding
 2. every subject has a non-zero probability of receiving either treatment
 
-In fact, these same assumptions underly regression based approaches but are often not stated explicitly. 
+In fact, these same assumptions underly regression based approaches but are often not stated explicitly. The first assumption is difficult to prove, and sensitivity analysis may be the only means of clarifying the extent to which all possible confounders have been included.
 
 In a randomised controlled trial we can directly estimate the treatment effect by comparing the outcomes in the treatment group to that in the control group - knowing that the groups do not differ in any systematic way due to randomisation. This is not possible in observational studies, even when great care is taken in the design phase to minimise bias in treatment assignment.
 
@@ -19,44 +19,52 @@ Regression (in its various forms) is perhaps the most commonly used technique fo
 regression will be biased.
 
 In this setting, a PS analysis divides the process in two. First, the selection process itself is modelled producing the propensity score. Second, the score is used in some way to estimate the treatment effect. There are a number of advantages to this process.
-- often there are a large number of variables for which we wish to “adjust”, but we are only interested in the effect of a small subset - ie the majority are a “nuisance”
-- separation of the “causal” question from the modelling approach
+- often there are a large number of variables for which we wish to “adjust”, but we are only interested in the effect of the treatment or a small subset - ie the majority are a “nuisance”
+- research suggests that in survival analyses, at least 10 events (deaths/recurrences) should be observed for every variable included in the regression model to allow adequate adjustment - this will be very difficult to achieve if all baseline variables are included
+- separation of the “causal” question ("Does treatment X lead to better Y?") from the modelling approach ()
+- it can be easier to ascertain if the PS model is correctly specified
 - 
 
 A full PS based analysis involves a number of steps:
 
-1. Identify the important covariates over which balance must be obtained
-2. Select the estimand of interest (ATE or ATT) 
-3. Use an appropriate modelling technique to derive the PS from the data
-4. Select the technique through which the samples will be compared (matching, stratification, IPTW, covariate adjustment, CBPS, etc)
-5. Check the balance obtained using an appropriate metric
-6. Estimate the treatment effect
+##1. Identify the important covariates over which balance must be obtained
+##2. Select the estimand of interest (ATE or ATT) 
+##3. Use an appropriate modelling technique to derive the PS from the data
+##4. Select the technique through which the samples will be compared (matching, stratification, IPTW, covariate adjustment, CBPS, etc)
+##5. Check the balance obtained using appropriate metrics
+##6. Estimate the treatment effect
 
 Research into the use of PS in medical literature shows a rapid increase in its use - understandably given the potential benefits - but most authors do not provide sufficient information related to the above steps, particularly 1-5. The bulk of the medical literature focusses on the methods of estimating the treatment effect, the parameter of most clinical interest (eg survival, risk ratio, etc). The absence of information regarding the PS model specification means the reader is limited in their ability to assess the validity and generalisability of this effect.
 
 
 # 1. Identifying the covariates
 
-Relationship of variables to outcome, or outcome and treatment selection.
+There has been a great deal of discussion, but not a lot of clear guidelines, for selection of covariates for PS estimation. One possibility is to include all measured baseline covariates, only baseline covariates that are associated with treatment assignment, only covariates that affect the outcome, or all covariates that affect both treatment assignment and outcome. Of course the PS model should not include variables that may be modified by or measured after treatment assignment.
+
+Perhaps counterintuitively, some studies [Brookhart 2006] suggest that it is more important to include all baseline variables that affect the outcome (including those that also affect treatment assignment), and that including variables that affect only treatment assignment may decrease the precision of the estimate.
+
+To some extent, expert opinion guided by current research is the driving force for appropriate model makeup.
+
+
 
 # 2. Selecting the estimand of interest
 
-The majority of PS based analyses in the surgical literature involve matching on the PS. Almost invariably, this leads to estimation of the “average treatment effect for the **treated**" or ATT. This estimates the effect of treatment on patients who actually received the treatment. This is often desirable if your overall population contains patients for whom the treatment would not be applicable. A relevant example may be 
+The majority of PS based analyses in the surgical literature involve matching on the PS. Almost invariably, this leads to estimation of the “average treatment effect for the **treated**" or **ATT**. This estimates the effect of treatment on patients who actually received the treatment. This is often desirable if your overall population contains patients for whom the treatment would not be applicable. A relevant example may be ...
 
-In contrast, the "average treatment effect" or ATE, is the average effect of moving the entire population from untreated to treated - ie the same effect that one aims to estimate in a randomised controlled trial.
+In contrast, the "average treatment effect" or **ATE**, is the average effect of moving the entire population from untreated to treated - ie the same effect that one aims to estimate in a randomised controlled trial.
 
-In fact, under the conditions of an RCT, the ATT and the ATE will be the same, as the treated and untreated populations should not differ in any systematic way (although randomisation does not remove all differences between populations).
+Under the conditions of an RCT, the ATT and the ATE will be the same, as the treated and untreated populations should not differ in any systematic way (although randomisation does not remove *all* differences between populations).
 
-For the comparison of laparoscopic to open surgery for the management of colorectal liver metastases, a number of case-matched and PS-matched studies have successfully shown no clear difference in short and long term outcomes. A recent excellent met analysis [Geller][2] combined many of these to draw the conclusion that the laparoscopic approach is safe and effective, however, it had to be qualified by the oft heard “carefully selected patients” and due to the limitations of matching, was only truly applicable for those with a small number of mCRC lesions. For this reason, we chose to estimate the ATE to provide a more generalisable result.
+For the comparison of laparoscopic to open surgery for the management of colorectal liver metastases, a number of case-matched and PS-matched studies have successfully shown no clear difference in short and long term outcomes. A recent excellent meta-analysis [Geller][2] combined many of these to draw the conclusion that the laparoscopic approach is safe and effective, however, it had to be qualified by the oft heard “carefully selected patients” and due to the limitations of matching, was only truly applicable for those with a small number of mCRC lesions. For this reason, we chose to estimate the ATE to provide a more generalisable result.
 
 
 # 3. Modelling the PS
 
-The most common way to estimate the PS in the surgical literature is by using logistic regression with or without higher order or interaction terms. In their recent analysis of nearly 300 articles using PS techniques in the medical literature, Sanni Ali et al found that only 5.7% included information regarding interaction/higher-order terms, and only 2.4% reported the PS model itself. It is important to draw a distinction between how a logistic regression model is usually created and used (to parsimoniously estimate conditional effects) and its use in estimating the PS. 
+The most common way to estimate the PS in the surgical literature is by using logistic regression with or without higher order and interaction terms. In their recent analysis of nearly 300 articles using PS techniques in the medical literature, Sanni Ali et al found that only 5.7% included information regarding interaction/higher-order terms, and only 2.4% reported the PS model itself. It is important to draw a distinction between how a logistic regression model is usually created and used (to parsimoniously estimate conditional effects) and its use in estimating the PS. 
 
-In the usual creation of a regression model, one might include all variables initially, and step-wise remove those that are thought to have a limited impact on the overall estimate based on some estimate of “goodness or fit”. This is not necessarily desirable in PS models, as even variables with small relative influence may still lead to an improved “fit” and a better estimate of the PS. Similarly, “main effects” are often the only effects modelled and interactions are ignored, thus assuming that all variables have independent, linear relationships with the log-odds of being selected for treatment (“interaction” occurs when the effect of one variable  varies depending on the value of a second variable). This is not likely to be a realistic assumption, and can lead to significant bias in PS estimation. In the example of the present study, lesion count and lesion size could be assumed to effect survival **and** treatment selection (making them confounders). Clearly, however, the impact of lesion size will be different depending on lesion count, i.e. the difference between one small lesion and ten small lesions is not likely to be easily expressed in linear terms and they will almost certainly “interact”.
+In the usual creation of a regression model, one might include all variables that were important in univariate analysis, and step-wise remove those that are thought to have a limited impact on the overall estimate based on some estimate of “goodness or fit”. This is not necessarily desirable in PS models, as even variables with small relative influence may still lead to an improved “fit” and a better estimate of the PS. Similarly, “main effects” are often the only effects modelled and interactions are ignored, thus assuming that all variables have independent, linear relationships with the log-odds of being selected for treatment (“interaction” occurs when the effect of one variable  varies depending on the value of a second variable). This is not likely to be a realistic assumption, and can lead to significant bias in PS estimation. In the example of the present study, lesion count and lesion size could be assumed to effect survival **and** treatment selection (making them confounders). Clearly, however, the impact of lesion size will be different depending on lesion count, i.e. the difference between one small lesion and ten small lesions is not likely to be easily expressed in linear terms and they will almost certainly “interact”.
 
-Additionally, many of the statistics used to estimate the quality of a model (e.g. Hosmer-Lemeshow test) 
+Additionally, many of the statistics used to estimate the quality of a model (e.g. Hosmer-Lemeshow test) ...
 
 To overcome some of these difficulties, many researches have turned to machine learning approaches. An algorithmic approach is used that models the relationship between the outcome and the predictor without making assumptions about the specific form of the data model (in logistic regression the conditional distribution is a Bernoulli distribution and the probabilities of an outcome given the predictors follows a logistic function/distribution). This approach has been shown to be superior to logistic regression in PS estimation by a number of authors [Lee](). There are many possible ML approaches but Generalised Boosted modelling (GBM) was chosen for its availability, reliability and history of successful application. 
 

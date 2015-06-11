@@ -11,10 +11,11 @@ library(gdata)
 library(readxl)
 library(readr)
 library(ggplot2)
+library(ggthemes)
 library(survival)
 library(lubridate)
 library(mice)
-source("~/Dropbox/Research/colorectal mets/scripts/stable.weights.R")
+source("../../../Research/colorectal mets/scripts/stable.weights.R")
 library(twang)
 library(dplyr)
 library(tidyr)
@@ -30,7 +31,7 @@ rm(raw, dif_segs, id_twostage)
 ```
 
 #Demographics
-```{r}
+```{r, error=FALSE, warning=FALSE, echo=FALSE}
 #Summarise distinct patient numbers and total procedure numbers by surgical approach
 new %>% 
   group_by(lap) %>% 
@@ -155,8 +156,9 @@ bal.dx.ave.wt <-  list(unw=bal.dx.ave.wt$unw, wtd=bal.dx.ave.wt[[2]])
 knitr::kable(cbind(round(bal.dx.ave.wt$unw[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2), round(bal.dx.ave.wt$wtd[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2)))
 
 #Start building plots
-plotdata <- as.data.frame(cbind(asam=c(bal.dx.ave.wt$unw$std.eff.sz, bal.dx.ave.wt$wtd$std.eff.sz), wt = rep(c("unw", "wtd"), each=27), vars=rep(rownames(dx.ave.wt$desc$unw$bal.tab$results), times=2)))
-ggplot(plotdata, aes(wt, abs(as.numeric(as.character(asam))), colour=wt, group=vars)) + geom_point() + geom_line()
+source("balance_plots.R")
+balplot
+qqbalplot
 ```
 
 
@@ -178,6 +180,86 @@ finaldata %>% group_by(.imp) %>% mutate(mhlos = hlos - mean(hlos, na.rm=T)) -> f
 
 #Final imputed mids
 imp.mids <- as.mids(as.data.frame(finaldata), .imp = match(".imp", names(finaldata)), .id=match(".id", names(finaldata)))
+```
+
+#MItools version
+```{r}
+#mitools version
+library(mitools)
+mit <- impdata[2:6]
+for (i in 1:5) {
+  mit[[i]]$stable.w <- ave.wt
+  mit[[i]]$index <- car::recode(mit[[i]]$index, '2:4=2')
+  #mit[[i]]$cumlap <- car::recode(mit[[i]]$cumlap, '2:4=2')
+  mit[[i]]$numlap <- car::Recode(mit[[i]]$numlap, '2:4=2')
+  mit[[i]] <- mit[[i]] %>% group_by(id_patients) %>% mutate(ctime = ifelse(index<max(index),rtime,cens_time))
+  mit[[i]] %>% mutate(gaptime = rtime-time) -> mit[[i]]
+  mit[[i]] %>% mutate(mhlos = hlos-mean(hlos, na.rm=T)) -> mit[[i]]
+}
+
+```
+
+#Survey design parts
+```{r}
+midata <- imputationList(mit)
+design.ate <- svydesign(ids = ~id_patients, weights=~stable.w, data=midata)
+design.sing <- svydesign(ids = ~id_patients, weights=~stable.w, data=midata$imputations$psate1)
+```
+
+
+
+#Weighted stats
+```{r}
+
+#svyby(~bloodloss+hlos, ~lap, design.ate, svyquantile, quantiles=0.5, ci=TRUE, vartype="ci", na.rm=T)
+
+#weighted, pooled, MI data!
+MIcombine(with(design.ate, svyby(~bloodloss+hlos+optime, ~lap,svyquantile, quantiles=0.5, ci=TRUE, vartype = "var")))
+
+#svyranktest(bloodloss~lap, design.ate) Kruskall-wallis
+
+#weighted chi-sq - better to use weighted prop test
+with(design.ate, svytable(~lap + posmarg, Ntotal = 284, round = T))
+
+#unweighted, but imputed posmarg rates:
+with(finaldata[finaldata$.imp==1,], table(margin<1, lap))
+
+summary(MIcombine(with(design.ate, svyby(~posmarg, ~lap, svyciprop, vartype="var"))))
+
+#Pool prop-test estimates:
+X2 <- sum(mapply(function(x) x$statistic, lapply(with(design.ate, svytable(~lap + posmarg, Ntotal = 284, round = T)), prop.test)))/5
+
+pchisq(X2, 1, lower.tail = F) #P-value
+
+#GLM to give odds-ratio and p-val
+summary(pool(with(imp.mids, glm(margin<1~lap, weights=stable.w))))
+
+#svyglm(bloodloss ~ lap, design=design.ate) #gives mean
+
+#svylogrank
+
+#KM survival and follow-up
+#Median follow-up by KMPF (reverse kaplan meier)
+survfit(Surv(cens_month, cens==0)~1, weights = stable.w, finaldata[finaldata$.imp==1,])
+
+#KM survival with lap alone - any dataframe is ok
+survfit(Surv(time,ctime, cens)~lap+cluster(id_patients), weights = stable.w, finaldata[finaldata$.imp==1,])
+
+#5yr OS
+summary(survfit(Surv(time,ctime, cens)~lap, weights = stable.w, finaldata[finaldata$.imp==1,]), times=1826.25)
+
+#Logrank
+svylogrank(Surv(cens_month, cens)~lap, design=design.sing, rho=1)
+
+#RFS strata by index - gaptime is what we want to know - recurrence after each operation
+survfit(Surv(gaptime, (rec==1|cens==1))~lap + strata(index), weights = stable.w, finaldata[finaldata$.imp==1,])
+
+#logrank
+svylogrank(Surv(gaptime, (rec==1|cens==1))~lap+strata(index), design=design.sing, rho=1)
+
+#compare only the >2nd procedures - unweighted, but the numbers are the same
+survdiff(Surv(gaptime, (rec==1|cens==1))~lap, finaldata[finaldata$.imp==1,], subset=index==2)
+
 ```
 
 #Weighted regression
@@ -235,3 +317,4 @@ rfs.final.data %>% mutate(est=exp(est), `lo 95`=exp(`lo 95`), `hi 95` = exp(`hi 
 row.names(rfs.final.data) <- c("hlos", "T2", "T3", "isbilateral", "lap")
 
 ```
+

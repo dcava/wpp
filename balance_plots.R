@@ -12,7 +12,7 @@ plotdata %>% group_by(wt) %>% mutate(rk=row_number(kspval)) -> plotdata
 
 
 ##Balance plot
-ggplot(plotdata, aes(wt, abs(asam), shape=sig, group=vars)) + 
+balplot <- ggplot(plotdata, aes(wt, abs(asam), shape=sig, group=vars)) + 
   geom_point(aes(size=2)) + 
   geom_line() +
   geom_hline(aes(yintercept=0.2), linetype=2, alpha=0.5) +
@@ -27,7 +27,7 @@ ggplot(plotdata, aes(wt, abs(asam), shape=sig, group=vars)) +
 
 ##########
 #QQ-plot
-ggplot(plotdata, aes(rk, kspval, shape=wt)) + 
+qqbalplot <- ggplot(plotdata, aes(rk, kspval, shape=wt)) + 
   geom_point() + 
   geom_segment(data=plotdata, aes(x=0, y=0, xend=max(rk), yend=1), linetype=2, colour="grey50") +
   scale_shape_manual(values=c(1,17), labels=c("Unweighted", "Weighted"), "") +
