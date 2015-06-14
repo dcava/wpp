@@ -11,14 +11,14 @@ ystratalabs <- c("Open(1st)", "Open(2+)", "Laparoscopic(1st)", "Laparoscopic(2+)
 ystrataname <- ""
 m <- max(nchar(ystratalabs))
 
-d <- length(levels(df$strata))
+
 times <- seq(0, max(xlims), by = timeby)
 
 
 ####KM - rfs by index
 rfs_km <- survfit(Surv(gaptime, (rec==1|cens==1))~lap + strata(index), weights = stable.w, finaldata[finaldata$.imp==1,])
 df.rfs <- tidy(rfs_km)
-
+d <- length(levels(df.rfs$strata))
 
 ###Data for confidence bars
 timesci <- seq(0,max(rfs_km$time), by= timeby*2)
@@ -42,7 +42,7 @@ p <- ggplot() +
   geom_step(data=df.rfs, aes(time, (1-estimate), linetype = strata, colour=strata), size = 0.7) +
   theme_bw() +
   theme(axis.title.x = element_text(vjust = 0.5)) +
-  scale_x_continuous(xlabs, breaks = times, limits = xlims, labels=c("0", "1", "2", "3", "4", "5", "6", "7", "8", "9","10")) +
+  scale_x_continuous(xlabs, breaks = times, limits = xlims, labels=c("0", "1", "2", "3", "4", "5")) +
   scale_y_continuous("Percent recurrence or death", limits = c(0, 1), labels=percent) +
   scale_linetype_manual(labels = ystratalabs, breaks = names(rfs_km$strata), values=c(1,1,2,2,1,1,2,2)) +
   scale_color_manual(labels = ystratalabs, breaks = names(rfs_km$strata), values=c("grey20", "grey50", "grey20", "grey50","grey20", "grey50", "grey20", "grey50")) +
