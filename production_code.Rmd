@@ -6,7 +6,7 @@ output: html_document
 ---
 
 #Load libraries
-```{r,results='hide', warning=FALSE, error=FALSE, message=FALSE}
+```{r,results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 library(gdata)
 library(readxl)
 library(readr)
@@ -22,16 +22,17 @@ library(tidyr)
 library(magrittr)
 library(knitr)
 library(stringr)
+library(rlist)
 ```
 
 #Import, clean-up
-```{r}
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 source("data_tidying.R")
 rm(raw, dif_segs, id_twostage)
 ```
 
 #Demographics
-```{r, error=FALSE, warning=FALSE, echo=FALSE}
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 #Summarise distinct patient numbers and total procedure numbers by surgical approach
 new %>% 
   group_by(lap) %>% 
@@ -97,7 +98,7 @@ new %>%
 
 
 #Demographics Output
-```{r}
+```{r, results='asis', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 #Print demographics
 kable(ptnumbers, col.names=c("Laparoscopic", "Patients", "Procedures"))
 str_c("Number of patients with single procedures: ", singlepts)
@@ -122,7 +123,7 @@ ggplot(testgraph, aes(x=year, y=n, fill=interaction(lap,ismajor))) + geom_histog
 
 
 #Imputation
-```{r}
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 imp <- mice(as.data.frame(subnew), method="cart")
 imptmp <- complete(imp, "long", include=TRUE)
 imptmp %<>% group_by(.imp, id_patients) %>% mutate(
@@ -139,7 +140,7 @@ impmids <- as.mids(as.data.frame(imptmp))
 ```
 
 #PS scores
-```{r}
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 propscores <- vector("list")
 for(i in 1:5) {
       tmp <- ps(lap~age+sex+CEA+ismajor+difloc+isbilateral+lesionmaxdiameter+lesioncount+primarytumourgrade+primaryT+primaryN+year_primary+primarytreatment, estimand = "ATE", data=complete(impmids,i), interaction.depth=2, n.trees = 1000, shrinkage=0.05, verbose=FALSE, bag.fraction = 0.3, stop.method = "ks.max")
@@ -150,7 +151,7 @@ for(i in 1:5) {
 
 
 #Summarise
-```{r}
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 psresults <- vector("list")
 impdata <- vector("list")
 impweights <- vector("list")
@@ -160,15 +161,22 @@ impdata[["psate0"]] <- as.data.frame(subnew)
       name <- paste("psate",i,sep="")
       psresults[[name]] <- propscores[[i]]
       impdata[[name]] <- complete(impmids,i)
-      impweights[[name]] <- stable.weights(propscores[[i]], "ks.max")
+      impweights[[name]] <- data.frame(weights=stable.weights(propscores[[i]], "ks.max"), treat=propscores[[i]]$treat)
   }
 
 ```
 
 #Plots and balance computations
-```{r}
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 #Make a dataframe from the imputed scores and average the weights
-ave.wt <- as_data_frame(impweights) %>% rowMeans()
+ave.wt <- as_data_frame(list.map(impweights, weights)) %>% rowMeans()
+
+plotweights <- data.frame(weights=c(unlist(list.map(impweights, weights))), treat=c(unlist(list.map(impweights, treat))), imp=rep(1:5, each=284))
+
+#Boxplot of weights
+ggplot(plotweights, aes(factor(treat), weights, fill=interaction(factor(imp), factor(treat)))) + geom_boxplot() + facet_wrap(~imp)
+#histogram of weights
+ggplot(plotweights, aes(weights, fill=interaction(as.factor(imp), as.factor(treat)))) + geom_histogram() + facet_wrap(~imp)
 
 dx.names <- psresults[[1]]$gbm.obj$var.names
 dx.ave.wt <- dx.wts(ave.wt, data=impdata[[2]], vars=dx.names, estimand="ATE", treat.var = "lap")
@@ -183,7 +191,7 @@ source("balance_plots.R")
 
 
 #Plot/balance output
-```{r}
+```{r, results='asis', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 knitr::kable(cbind(round(bal.dx.ave.wt$unw[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2), round(bal.dx.ave.wt$wtd[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2)))
 
 balplot
@@ -191,7 +199,7 @@ qqbalplot
 ```
 
 #Make large dataframe
-```{r}
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 finaldata <- plyr::rbind.fill(impdata)
 #Combine 2nd and greater number of ops due to small numbers
 finaldata$index <- car::recode(finaldata$index, '2:4=2')
@@ -211,14 +219,13 @@ rm(impmids, impweights, imptmp)
 ```
 
 #MItools version
-```{r}
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 #mitools version
 library(mitools)
 mit <- impdata[2:6]
 for (i in 1:5) {
   mit[[i]]$stable.w <- ave.wt
   mit[[i]]$index <- car::recode(mit[[i]]$index, '2:4=2')
-  #mit[[i]]$cumlap <- car::recode(mit[[i]]$cumlap, '2:4=2')
   mit[[i]]$numlap <- car::Recode(mit[[i]]$numlap, '2:4=2')
   mit[[i]] <- mit[[i]] %>% group_by(id_patients) %>% mutate(ctime = ifelse(index<max(index),rtime,cens_time))
   mit[[i]] %>% mutate(gaptime = rtime-time) -> mit[[i]]
@@ -228,7 +235,7 @@ for (i in 1:5) {
 ```
 
 #Survey design parts
-```{r}
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 midata <- imputationList(mit)
 design.ate <- svydesign(ids = ~id_patients, weights=~stable.w, data=midata)
 design.sing <- svydesign(ids = ~id_patients, weights=~stable.w, data=midata$imputations$psate1)
@@ -238,7 +245,7 @@ design.unw <- svydesign(ids = ~id_patients, data=midata)
 
 
 #Weighted stats
-```{r}
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 #Setup for unw vs wtd periop outcomes - Bloodloss, LOS, operative time and margin (posmarg separate)
 
 #weighted, pooled, MI data - gets medians!
@@ -269,7 +276,7 @@ X2unw <- sum(mapply(function(x) x$statistic, lapply(with(design.unw, svytable(~l
 ```
 
 #Weighted univar output
-```{r}
+```{r,warning=FALSE, error=FALSE, message=FALSE, echo=TRUE}
 summary(postopwtd, digits = 2)
 summary(postopunw, digits = 2)
 summary(posmargwtd, digits =2)
@@ -281,7 +288,7 @@ pchisq(X2unw, 1, lower.tail = F)
 
 
 #KM survival and follow-up
-```{r}
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 #Median follow-up time by KMPF (reverse kaplan meier)
 medfup <- survfit(Surv(cens_month, cens==0)~1, weights = stable.w, finaldata[finaldata$.imp==1,])
 
@@ -301,22 +308,28 @@ rfskm <- survfit(Surv(gaptime, (rec==1|cens==1))~lap + strata(index) +cluster(id
 #logrank
 svylogrank(Surv(gaptime, (rec==1|cens==1))~lap+strata(index), design=design.sing, rho=1)
 
-#compare only the >2nd procedures - unweighted, but the numbers are the same
+#compare only the first or only the second procedures - unweighted, but the numbers are the same
+survdiff(Surv(gaptime, (rec==1|cens==1))~lap, finaldata[finaldata$.imp==1,], subset=index==1)
 survdiff(Surv(gaptime, (rec==1|cens==1))~lap, finaldata[finaldata$.imp==1,], subset=index==2)
 
 ```
 
 #KM output
-```{r}
+```{r, results='asis', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+#Median FU
 pander::pandoc.table(summary(medfup)$table[5:7], caption = "Median follow-up")
+#OS
 pander::pandoc.table(summary(kmos, scale=365.25/12)$table, caption = "Kaplan-Meier OS")
 kable(data.frame("Approach"=c("Open", "Laparoscopic"), summary(fiveyros, times=1826.25)[c(1,9,11,12)]), digits = 2, caption = "5yr OS")
 pander::pandoc.table(lros[[2]], caption="Generalised Wilcoxon test, OS")
-kable(data.frame(summary(rfskm, times=1826.25)[c(1,9,11,12)]), digits = 2, caption = "5yr RFS")
+#RFS
+pander::pandoc.table(summary(rfskm, scale=365.25/12)$table, caption = "Kaplan-Meier RFS")
+kable(data.frame("Approach"=c("Open", "Laparoscopic"), summary(rfskm, times=1826.25)[c(9,11,12)]), digits = 2, caption = "5yr RFS")
+
 ```
 
 #Weighted regression
-```{r}
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 
 #OS
 doublerobust.full <- with(imp.mids, coxph(Surv(time,ctime,cens)~lap+cluster(id_patients)+ismajor+isbilateral+primaryN+lesioncount, weights = stable.w))
