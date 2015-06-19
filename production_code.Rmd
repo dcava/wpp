@@ -249,7 +249,7 @@ design.unw <- svydesign(ids = ~id_patients, data=midata)
 #Setup for unw vs wtd periop outcomes - Bloodloss, LOS, operative time and margin (posmarg separate)
 
 #weighted, pooled, MI data - gets medians!
-postopwtd <- MIcombine(with(design.ate, svyby(~bloodloss+hlos++margin, ~lap,svyquantile, quantiles=0.5, ci=TRUE, vartype = "var")))
+postopwtd <- MIcombine(with(design.ate, svyby(~bloodloss+hlos+optime+margin, ~lap,svyquantile, quantiles=0.5, ci=TRUE, vartype = "var")))
 
 #unweighted, pooled MI data
 postopunw <- MIcombine(with(design.unw, svyby(~bloodloss+hlos+optime+margin, ~lap,svyquantile, quantiles=0.5, ci=TRUE, vartype = "var")))

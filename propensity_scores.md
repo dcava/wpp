@@ -1,4 +1,18 @@
 
+#Background:
+
+In the field of surgery, evaluating and comparing treatments via the gold standard of a randomised controlled trial is not always feasible. Comparing laparoscopic ("keyhole" or "minimally invasive" surgery) with standard open surgery is particularly challenging due to difficulties with blinding and, in many cases, a perceived lack of equipoise.
+
+Unfortunately, the result is that we are often faced with multiple, usually small (< 100 patients) observational cohort trials. These are plagued with selection bias, as early in the development of new surgical procedures "ideal" patients are selected to minimise the difficulty of the operation. This generally leads to a gross overestimate of treatment effect for the new procedure in early trials. With the passage of time and gaining of experience, the patient populations generally approach each other and the estimate of effect size becomes more reliable. Meta-analysis of these trials can be helpful, but does little to ensure that treatment and control groups don't differ in a systematic way.
+
+This is the current state of affairs with laparoscopic liver surgery. The technique has been in use for approximately 20 years and whilst not "widespread", it is a commonly used technique among specialist liver surgeons. These sub-specialists who perform this surgery on a regular basis, point to the multitude of observational trials showing safety and comparative oncological efficacy (as measured by disease free and overall survival). Indeed, most surgeons utilising the technique would quote a significant improvement in peri-operative outcomes (such as shorter hospital stay, reduced blood loss, pain and wound complications). Among the wider surgical community concerns remain regarding the lack of robust comparative trials that would provide confidence that patient safety and oncological outcomes are not compromised.
+
+There are a wide variety of indications, both benign and malignant, for liver surgery. 
+
+In the absence of an RCT, techniques are available that can reduce the impact of observable sources of bias. Propensity score techniques have been used in the social sciences for many years, but are not widely used or understood in the surgical literature. Naive matching is commonly used, but rarely effective. There are a variety of methods whereby the propensity score can be used to estimate treatment effects: matching, stratification, covariate adjustment and inverse probability of treatment weighting (IPTW).
+
+The use of IPTW using propensity scores should provide balance in baseline characteristics between the laparoscopic (treatment) group and the open (control) group allowing for a more robust comparison of peri-operative and survival outcomes.
+
 # Propensity scores
 
 The propensity score is the probability of receiving a particular treatment conditional on some set of observed baseline variables. It was originally described by Rosenbaum and Rubin (1983) and is part of the “Potential outcomes framework”. The PS is a balancing score - those patients with the same PS have similar distributions of measured confounders given the PS [JCE article](). Therefore, if certain assumptions hold, conditioning on the PS allows the average treatment effect to be estimated. This is a major potential advantage, as estimating causal effects from observational studies with non-equivalent groups is a task often faced by researchers in the surgical community. 
