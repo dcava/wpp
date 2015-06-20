@@ -64,7 +64,17 @@ The reasoning behind generating multiple datasets is that each will contain a di
 
 MICE approaches MI by "fully conditional specification" that specifies the imputation model on a variable-by-variable basis. This is in contrast to other approaches where an attempt may be made to specify a joint multivariate model of missingness for the dataset. It is a Markov chain Monte Carlo (MCMC) method that builds up a multivariate model by specifying a multiple conditional models for each variable.
 
+As each missing variable is modelled separately, a model must be chosen that is appropriate depending on variable type. For example, continous, positive variables may require a Gaussian (normal) model, categorical variables a logistic-based model etc. MICE allows this to be specified for each variable. For simplicity, the current analysis uses the same flexible model for all variables "CART". This is a Classification and Regression Tree model that should now be familiar as being similar to the underlying algorithm in GBM. It copes well with both continous and categorical variables and requires little further tuning.
 
+> As per [Van Buren (Jstat)], there are seven important choices to be made in imputation:
+> 
+> 1. Is the MAR assumption plausible?
+> 2. What form will the imputation model take for each variable?
+> 3. Which variables should act as predictors for the msising data?
+> 4. Should we impute variables that are functions of other variables (eg BMI as a function of height and weight)
+> 5. What order should the variables be imputed?
+> 6. Setup and number of iterations
+> 7. Number of imputed data sets
 
 
 

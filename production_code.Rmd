@@ -122,9 +122,19 @@ ggplot(testgraph, aes(x=year, y=n, fill=interaction(lap,ismajor))) + geom_histog
 ```
 
 
-#Imputation
+#Missing data and imputation
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
-imp <- mice(as.data.frame(subnew), method="cart")
+
+#Visualise missing data
+library(mi)
+subnew %>% dplyr::select(-primaryM) -> mi.data
+mdf <- missing_data.frame(as.data.frame(mi.data))
+image(mdf)
+detach(mi)
+
+library(mice)
+#Do the imputations
+imp <- mice(as.data.frame(subnew), method="cart", maxit=10)
 imptmp <- complete(imp, "long", include=TRUE)
 imptmp %<>% group_by(.imp, id_patients) %>% mutate(
     primaryT=first(primaryT),
@@ -143,7 +153,7 @@ impmids <- as.mids(as.data.frame(imptmp))
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 propscores <- vector("list")
 for(i in 1:5) {
-      tmp <- ps(lap~age+sex+CEA+ismajor+difloc+isbilateral+lesionmaxdiameter+lesioncount+primarytumourgrade+primaryT+primaryN+year_primary+primarytreatment, estimand = "ATE", data=complete(impmids,i), interaction.depth=2, n.trees = 1000, shrinkage=0.05, verbose=FALSE, bag.fraction = 0.3, stop.method = "ks.max")
+      tmp <- ps(lap~age+sex+CEA+ismajor+difloc+isbilateral+lesionmaxdiameter+lesioncount+primarytumourgrade+primaryT+primaryN+year_primary+primarytreatment, estimand = "ATE", data=complete(impmids,i), interaction.depth=2, n.trees = 10000, shrinkage=0.05, verbose=FALSE, bag.fraction = 0.3, stop.method = "ks.max")
       propscores[[paste("psate",i,sep="")]] <- tmp
 }
 
