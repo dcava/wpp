@@ -16,7 +16,7 @@ times <- seq(0, max(xlims), by = timeby)
 
 
 ####KM - rfs by index
-rfs_km <- survfit(Surv(gaptime, (rec==1|cens==1))~lap + strata(index), weights = stable.w, finaldata[finaldata$.imp==1,])
+rfs_km <- survfit(Surv(gaptime, (rec==1|cens==1))~lap + strata(index) +cluster(id_patients), weights = stable.w, finaldata[finaldata$.imp==1,])
 df.rfs <- tidy(rfs_km)
 d <- length(levels(df.rfs$strata))
 
@@ -31,31 +31,31 @@ conf.data$strata <- as.factor(conf.data$strata)
 
 #HR
 cox <- exp(summary(pool(rec_double.full))[1,c("est", "lo 95", "hi 95")])
-hr <- paste("HR = ", round(cox[1],3))
-ci <- paste("95% CI: ", round(cox[2],3), "-", round(cox[3],3))
+hr <- paste("HR = ", round(cox[1],2))
+ci <- paste("95% CI: ", round(cox[2],2), "-", round(cox[3],2))
 
 ######
 #Plot#
 ######
 
-p <- ggplot() +
+rfs_curve <- ggplot() +
   geom_step(data=df.rfs, aes(time, (1-estimate), linetype = strata, colour=strata), size = 0.7) +
   theme_bw() +
   theme(axis.title.x = element_text(vjust = 0.5)) +
   scale_x_continuous(xlabs, breaks = times, limits = xlims, labels=c("0", "1", "2", "3", "4", "5")) +
   scale_y_continuous("Percent recurrence or death", limits = c(0, 1), labels=percent) +
   scale_linetype_manual(labels = ystratalabs, breaks = names(rfs_km$strata), values=c(1,1,2,2,1,1,2,2)) +
-  scale_color_manual(labels = ystratalabs, breaks = names(rfs_km$strata), values=c("grey20", "grey50", "grey20", "grey50","grey20", "grey50", "grey20", "grey50")) +
+  scale_color_manual(labels = ystratalabs, breaks = names(rfs_km$strata), values=alpha(c("grey20", "grey50", "grey20", "grey50","grey20", "grey50", "grey20", "grey50"), c(1,0.5,1,0.5,1,0.5,1,0.5))) +
   scale_shape_manual(guide=FALSE, values=c(1,1,2,2)) + 
+  scale_alpha(guide=FALSE) +
   theme(panel.grid.minor = element_blank()) +
+  theme(legend.text = element_text(size=rel(1.5))) +
   theme(legend.position = c(ifelse(m < 10, .1, .2),ifelse(d < 4, 0.8, .3))) +    # MOVE LEGEND HERE [first is x dim, second is y dim]
   theme(legend.key = element_rect(colour = NA)) +
   labs(linetype = ystrataname, colour=ystrataname) +
   theme(plot.margin = unit(c(0, 1, .5,ifelse(m < 10, 1.5, 2.5)),"lines")) +
   ggtitle("Recurrence free survival (Kaplan-Meier estimate)") + 
   geom_errorbar(data=conf.data, aes(x=time*365.25, ymin=(1-lower), ymax=(1-upper), linetype=strata, colour=strata), width=1, position=position_dodge(width = 40)) + 
-  geom_point(data=conf.data, aes(time*365.25, 1-survival, shape=strata), position = position_dodge(width = 40)) +
-  annotate("text",x = 0.6 * 1826.25,y = 0.4,label = hr, size=3) +
-  annotate("text",x = 0.6 * 1826.25,y = 0.37,label = ci, size=3)
-
-p
+  geom_point(data=conf.data, aes(x=time*365.25, y=1-survival, shape=strata), position = position_dodge(width = 40)) +
+  annotate("text",x = 0.6 * 1826.25,y = 0.35,label = hr, size=3) +
+  annotate("text",x = 0.6 * 1826.25,y = 0.33,label = ci, size=3)

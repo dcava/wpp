@@ -6,7 +6,7 @@ output: html_document
 ---
 
 #Load libraries
-```{r,results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+```{r,results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=TRUE}
 library(gdata)
 library(readxl)
 library(readr)
@@ -28,13 +28,13 @@ library(scales)
 ```
 
 #Import, clean-up
-```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=TRUE}
 source("data_tidying.R")
 rm(raw, dif_segs, id_twostage)
 ```
 
 
-#Missing data and imputation
+#Missing data patterns
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 
 #Visualise missing data
@@ -45,11 +45,14 @@ image(mdf)
 detach(package:mi)
 ```
 
-
-```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+#Imputation
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=TRUE}
 library(mice)
 #Do the imputations
 imp <- mice(as.data.frame(subnew), method="cart", maxit=10)
+```
+
+```{r,  results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 imptmp <- complete(imp, "long", include=TRUE)
 imptmp %<>% group_by(.imp, id_patients) %>% mutate(
     primaryT=first(primaryT),
@@ -64,10 +67,10 @@ impmids <- as.mids(as.data.frame(imptmp))
 ```
 
 #PS scores
-```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=TRUE}
 propscores <- vector("list")
 for(i in 1:5) {
-      tmp <- ps(lap~age+sex+CEA+ismajor+difloc+isbilateral+lesionmaxdiameter+lesioncount+primarytumourgrade+primaryT+primaryN+year_primary+primarytreatment, estimand = "ATE", data=complete(impmids,i), interaction.depth=2, n.trees = 10000, shrinkage=0.05, verbose=FALSE, bag.fraction = 0.3, stop.method = "ks.max")
+      tmp <- ps(lap~age+sex+CEA+ismajor+difloc+isbilateral+lesionmaxdiameter+lesioncount+primarytumourgrade+primaryT+primaryN+year_primary+primarytreatment, estimand = "ATE", data=complete(impmids,i), interaction.depth=2, n.trees = 10000, shrinkage=0.01, verbose=FALSE, bag.fraction = 0.3, stop.method = "ks.max")
       propscores[[paste("psate",i,sep="")]] <- tmp
 }
 
@@ -423,10 +426,11 @@ row.names(rfs.final.data) <- c("hlos", "T2", "T3", "isbilateral", "lap")
 ```
 
 #Regression output
-```{r}
+```{r, results='asis', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 kable(os.final.data, align = 'l')
 kable(rfs.final.data, align = 'l')
 source("new_os_surv_curv.R")
 source("new_rfs_surv_curv.R")
-
+os_curve
+rfs_curve
 ```
