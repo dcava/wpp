@@ -39,7 +39,7 @@ for (i in 1:5) {
   ylab("Absolute standard difference") +
   xlab("") +
   scale_x_discrete(labels=c("Unweighted", "Weighted")) +
-  ggtitle("Change in effect size")
+  ggtitle(paste0("Change in effect size - imputed set ", i))
 
 ##########
 #QQ-plot
@@ -50,7 +50,7 @@ for (i in 1:5) {
   scale_x_continuous(breaks=seq(0,30,by=5)) +
   ylab("KS test p-values") +
   xlab("Rank of p-value for pre-treatment variables") +
-  ggtitle("Quantile-Quantile plot of observed p-values") +
+  ggtitle(paste0("Quantile-Quantile plot of observed p-values - imputed set ", i)) +
   theme_bw()
 
 }

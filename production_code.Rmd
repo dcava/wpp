@@ -15,7 +15,7 @@ library(ggthemes)
 library(survival)
 library(lubridate)
 library(mice)
-source("../../../Research/colorectal mets/scripts/stable.weights.R")
+source("stable.weights.R")
 library(twang)
 library(dplyr)
 library(tidyr)
@@ -23,6 +23,8 @@ library(magrittr)
 library(knitr)
 library(stringr)
 library(rlist)
+library(grid)
+library(scales)
 ```
 
 #Import, clean-up
@@ -41,7 +43,10 @@ subnew %>% dplyr::select(-primaryM) -> mi.data
 mdf <- missing_data.frame(as.data.frame(mi.data))
 image(mdf)
 detach(package:mi)
+```
 
+
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 library(mice)
 #Do the imputations
 imp <- mice(as.data.frame(subnew), method="cart", maxit=10)
@@ -55,7 +60,6 @@ imptmp %<>% ungroup() %>% mutate(posmarg = ifelse(margin<1,1,0))
 imptmp$posmarg <- as.factor(imptmp$posmarg)
 imptmp %>% group_by(id_patients) %>% mutate(cumlap = cumsum(lap)) %>% ungroup() -> imptmp
 impmids <- as.mids(as.data.frame(imptmp))
-
 
 ```
 
@@ -85,21 +89,16 @@ impdata[["psate0"]]$stable.w <- 1
       impdata[[name]] <- complete(impmids,i)
       impdata[[name]]$stable.w <- stable.weights(propscores[[i]], "ks.max")
       impweights[[name]] <- data.frame(weights=stable.weights(propscores[[i]], "ks.max"), treat=propscores[[i]]$treat, id=propscores[[i]]$data$id_patients)
-  }
+}
 
 ```
 
 #Plots and balance computations
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 #Make a dataframe from the imputed scores and average the weights
-ave.wt <- as_data_frame(list.map(impweights, weights)) %>% rowMeans()
+#ave.wt <- as_data_frame(list.map(impweights, weights)) %>% rowMeans()
 
-plotweights <- data.frame(weights=c(unlist(list.map(impweights, weights))), treat=c(unlist(list.map(impweights, treat))), imp=rep(1:5, each=284), id=c(unlist(list.map(impweights, id))))
-
-#Boxplot of weights
-ggplot(plotweights, aes(factor(treat), weights, fill=interaction(factor(imp), factor(treat)))) + geom_boxplot() + facet_wrap(~imp)
-#histogram of weights
-ggplot(plotweights, aes(weights, fill=interaction(as.factor(imp), as.factor(treat)))) + geom_histogram() + facet_wrap(~imp)
+#plotweights <- data.frame(weights=c(unlist(list.map(impweights, weights))), treat=c(unlist(list.map(impweights, treat))), imp=rep(1:5, each=284), id=c(unlist(list.map(impweights, id))))
 
 #dx.names <- psresults[[1]]$gbm.obj$var.names
 #dx.ave.wt <- dx.wts(ave.wt, data=impdata[[2]], vars=dx.names, estimand="ATE", treat.var = "lap")
@@ -109,15 +108,21 @@ ggplot(plotweights, aes(weights, fill=interaction(as.factor(imp), as.factor(trea
 
 #Start building plots
 #source("balance_plots.R")
-source("new_balance_plots.R")
 
+
+#Boxplot of weights
+#ggplot(plotweights, aes(factor(treat), weights, fill=interaction(factor(imp), factor(treat)))) + geom_boxplot() + facet_wrap(~imp)
+#histogram of weights
+#ggplot(plotweights, aes(weights, fill=interaction(as.factor(imp), as.factor(treat)))) + geom_histogram() + facet_wrap(~imp)
+
+source("new_balance_plots.R")
 ```
 
 
 #New Plot/balance output
-```{r}
+```{r, results='asis', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 for (i in 1:5) {
-  show(knitr::kable(cbind(round(ballist[[i]]$unw[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2), round(ballist[[i]]$wtd[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2))))
+  show(kable(cbind(round(ballist[[i]]$unw[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2), round(ballist[[i]]$wtd[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2)), align = 'l'))
 }
 
 for (i in 1:5) {show(balplotlist[[i]])}
@@ -177,7 +182,7 @@ for (i in 1:5) {
 ```
 
 #Survey design parts
-```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=TRUE}
 midata <- imputationList(mit)
 design.ate <- svydesign(ids = ~id_patients, weights=~stable.w, data=midata)
 design.sing <- svydesign(ids = ~id_patients, weights=~stable.w, data=midata$imputations$psate1)
@@ -206,6 +211,8 @@ new %>%
   tally() %>% 
   nrow() -> multiplepts
 
+procnum<- matrix(c("Single procedures ", singlepts, "Multiple procedures ", multiplepts), nrow = 2, byrow = T)
+colnames(procnum) <- c("Group", "n")
 # #Conversions
 # new %>% 
 #   group_by(lap, isconversion) %>% 
@@ -255,14 +262,13 @@ new %>%
 #Demographics Output
 ```{r, results='asis', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 #Print demographics
-kable(ptnumbers, col.names=c("Laparoscopic", "Patients", "Procedures"))
-str_c("Number of patients with single procedures: ", singlepts)
-str_c("Number of patients with multiple procedures: ", multiplepts)
-kable(proc_list[,2:3], col.names = c("Surgical approach", "n"))
-kable(majorhep, col.names = c("Laparoscopic", "Hepatectomy", "n"), caption = "Major hepatectomy")
-kable(lls, col.names = c("Laparoscopic", "n"), caption = "Left lateral sectionectomy")
-kable(segment, col.names = c("Laparoscopic", "n"), caption = "Segmentectomy/Bisegmentectomy")
-kable(tumorectomy, col.names = c("Laparoscopic", "n"), caption = "Tumorectomy")
+kable(ptnumbers, col.names=c("Laparoscopic", "Patients", "Procedures"), align = 'l')
+kable(procnum, align = 'l')
+kable(proc_list[,2:3], col.names = c("Surgical approach", "n"), align = 'l')
+kable(majorhep, col.names = c("Laparoscopic", "Hepatectomy", "n"), caption = "Major hepatectomy", align = 'l')
+kable(lls, col.names = c("Laparoscopic", "n"), caption = "Left lateral sectionectomy", align = 'l')
+kable(segment, col.names = c("Laparoscopic", "n"), caption = "Segmentectomy/Bisegmentectomy", align = 'l')
+kable(tumorectomy, col.names = c("Laparoscopic", "n"), caption = "Tumorectomy", align = 'l')
 ```
 
 
@@ -397,22 +403,30 @@ summary(pool(os_final))
 
 rec_doublerobust.mvr <- with(imp.mids, coxph(Surv(gaptime,(rec==1|cens==1))~lap+cluster(id_patients)+ismajor+isbilateral+primaryN+lesioncount+primaryT+bloodloss+mhlos+optime+strata(index), weights = stable.w))
 
-summary(pool(rec_doublerobust.mvr))
+#summary(pool(rec_doublerobust.mvr))
 
 rfs_final <- with(imp.mids, coxph(Surv(gaptime, (rec==1|cens==1))~cluster(id_patients)+mhlos+primaryT+isbilateral+lap, weights = stable.w))
 
-summary(pool(rfs_final))
+#summary(pool(rfs_final))
 
 os.final.data <- as.data.frame(summary(pool(os_final)))
 os.final.data <- os.final.data %>% select(est, `Pr(>|t|)`, `lo 95`, `hi 95`)
 os.final.data %>% mutate(est=exp(est), `lo 95`=exp(`lo 95`), `hi 95` = exp(`hi 95`)) -> os.final.data
 row.names(os.final.data) <- c("hlos", "T2", "T3", "lap")
-kable(os.final.data)
+
 
 rfs.final.data <- as.data.frame(summary(pool(rfs_final)))
 rfs.final.data <- rfs.final.data %>% select(est, `Pr(>|t|)`, `lo 95`, `hi 95`)
 rfs.final.data %>% mutate(est=exp(est), `lo 95`=exp(`lo 95`), `hi 95` = exp(`hi 95`)) -> rfs.final.data
 row.names(rfs.final.data) <- c("hlos", "T2", "T3", "isbilateral", "lap")
-kable(rfs.final.data)
+
 ```
 
+#Regression output
+```{r}
+kable(os.final.data, align = 'l')
+kable(rfs.final.data, align = 'l')
+source("new_os_surv_curv.R")
+source("new_rfs_surv_curv.R")
+
+```
