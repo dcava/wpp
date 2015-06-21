@@ -31,6 +31,161 @@ source("data_tidying.R")
 rm(raw, dif_segs, id_twostage)
 ```
 
+
+#Missing data and imputation
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+
+#Visualise missing data
+library(mi)
+subnew %>% dplyr::select(-primaryM) -> mi.data
+mdf <- missing_data.frame(as.data.frame(mi.data))
+image(mdf)
+detach(package:mi)
+
+library(mice)
+#Do the imputations
+imp <- mice(as.data.frame(subnew), method="cart", maxit=10)
+imptmp <- complete(imp, "long", include=TRUE)
+imptmp %<>% group_by(.imp, id_patients) %>% mutate(
+    primaryT=first(primaryT),
+    primaryN=first(primaryN),
+    primarytumourgrade=first(primarytumourgrade),
+    primarytreatment=first(primarytreatment))
+imptmp %<>% ungroup() %>% mutate(posmarg = ifelse(margin<1,1,0))
+imptmp$posmarg <- as.factor(imptmp$posmarg)
+imptmp %>% group_by(id_patients) %>% mutate(cumlap = cumsum(lap)) %>% ungroup() -> imptmp
+impmids <- as.mids(as.data.frame(imptmp))
+
+
+```
+
+#PS scores
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+propscores <- vector("list")
+for(i in 1:5) {
+      tmp <- ps(lap~age+sex+CEA+ismajor+difloc+isbilateral+lesionmaxdiameter+lesioncount+primarytumourgrade+primaryT+primaryN+year_primary+primarytreatment, estimand = "ATE", data=complete(impmids,i), interaction.depth=2, n.trees = 10000, shrinkage=0.05, verbose=FALSE, bag.fraction = 0.3, stop.method = "ks.max")
+      propscores[[paste("psate",i,sep="")]] <- tmp
+}
+
+```
+
+
+#Summarise
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+psresults <- vector("list")
+impdata <- vector("list")
+impweights <- vector("list")
+impdata[["psate0"]] <- as.data.frame(subnew)
+impdata[["psate0"]]$stable.w <- 1
+
+  for (i in 1:5) {
+      print(bal.table(propscores[[i]])$ks.max.ATE["ismajor",c("tx.mn", "ct.mn","std.eff.sz", "ks.pval","p")])
+      name <- paste("psate",i,sep="")
+      psresults[[name]] <- propscores[[i]]
+      impdata[[name]] <- complete(impmids,i)
+      impdata[[name]]$stable.w <- stable.weights(propscores[[i]], "ks.max")
+      impweights[[name]] <- data.frame(weights=stable.weights(propscores[[i]], "ks.max"), treat=propscores[[i]]$treat, id=propscores[[i]]$data$id_patients)
+  }
+
+```
+
+#Plots and balance computations
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+#Make a dataframe from the imputed scores and average the weights
+ave.wt <- as_data_frame(list.map(impweights, weights)) %>% rowMeans()
+
+plotweights <- data.frame(weights=c(unlist(list.map(impweights, weights))), treat=c(unlist(list.map(impweights, treat))), imp=rep(1:5, each=284), id=c(unlist(list.map(impweights, id))))
+
+#Boxplot of weights
+ggplot(plotweights, aes(factor(treat), weights, fill=interaction(factor(imp), factor(treat)))) + geom_boxplot() + facet_wrap(~imp)
+#histogram of weights
+ggplot(plotweights, aes(weights, fill=interaction(as.factor(imp), as.factor(treat)))) + geom_histogram() + facet_wrap(~imp)
+
+#dx.names <- psresults[[1]]$gbm.obj$var.names
+#dx.ave.wt <- dx.wts(ave.wt, data=impdata[[2]], vars=dx.names, estimand="ATE", treat.var = "lap")
+#bal.dx.ave.wt <- bal.table(dx.ave.wt)
+#bal.dx.ave.wt <-  list(unw=bal.dx.ave.wt$unw, wtd=bal.dx.ave.wt[[2]])
+
+
+#Start building plots
+#source("balance_plots.R")
+source("new_balance_plots.R")
+
+```
+
+
+#New Plot/balance output
+```{r}
+for (i in 1:5) {
+  show(knitr::kable(cbind(round(ballist[[i]]$unw[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2), round(ballist[[i]]$wtd[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2))))
+}
+
+for (i in 1:5) {show(balplotlist[[i]])}
+for (i in 1:5) {show(qqplotlist[[i]])}
+
+```
+
+
+#Plot/balance output
+```{r, results='asis', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+# knitr::kable(cbind(round(bal.dx.ave.wt$unw[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2), round(bal.dx.ave.wt$wtd[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2)))
+# 
+# balplot
+# qqbalplot
+```
+
+#Make large dataframe
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+finaldata <- plyr::rbind.fill(impdata)
+#Combine 2nd and greater number of ops due to small numbers
+finaldata$index <- car::recode(finaldata$index, '2:4=2')
+finaldata$.imp <- rep(0:5, each=284)
+finaldata$.id <- rep(1:284, times=6)
+
+finaldata <- finaldata %>% group_by(.imp, id_patients) %>% 
+  mutate(ctime = ifelse(index<max(index),rtime,cens_time),
+         numlap = sum(lap),
+         cens_month = round(cens_time/365.25*12, digits = 1),
+         gaptime = rtime-time)
+finaldata$numlap <- car::Recode(finaldata$numlap, '2:4=2')
+#finaldata$stable.w <- ave.wt
+finaldata[finaldata$.imp==0,]$posmarg <- finaldata[finaldata$.imp==1,]$posmarg
+finaldata %>% group_by(.imp) %>% mutate(mhlos = hlos - mean(hlos, na.rm=T)) -> finaldata
+
+#Final imputed mids
+imp.mids <- as.mids(as.data.frame(finaldata), .imp = match(".imp", names(finaldata)), .id=match(".id", names(finaldata)))
+rm(impmids, impweights, imptmp)
+```
+
+#MItools version
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+#mitools version
+library(mitools)
+mit <- impdata[2:6]
+for (i in 1:5) {
+  #mit[[i]]$stable.w <- ave.wt
+  mit[[i]]$index <- car::recode(mit[[i]]$index, '2:4=2')
+  mit[[i]] %>% group_by(id_patients) %>%
+    mutate(ctime = ifelse(index<max(index),rtime,cens_time),
+    numlap = sum(lap),
+    cens_month = round(cens_time/365.25*12, digits = 1),
+    gaptime = rtime-time) -> mit[[i]]
+  mit[[i]]$numlap <- car::Recode(mit[[i]]$numlap, '2:4=2')
+  mit[[i]] %>% mutate(mhlos = hlos-mean(hlos, na.rm=T)) -> mit[[i]]
+}
+
+```
+
+#Survey design parts
+```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
+midata <- imputationList(mit)
+design.ate <- svydesign(ids = ~id_patients, weights=~stable.w, data=midata)
+design.sing <- svydesign(ids = ~id_patients, weights=~stable.w, data=midata$imputations$psate1)
+design.unw <- svydesign(ids = ~id_patients, data=midata)
+```
+
+
+#Output
 #Demographics
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 #Summarise distinct patient numbers and total procedure numbers by surgical approach
@@ -120,139 +275,6 @@ testgraph %>% filter(as.character(year)>"1999") -> testgraph
 ggplot(testgraph, aes(x=year, y=n, fill=interaction(lap,ismajor))) + geom_histogram(stat="identity") +  scale_fill_gdocs(labels=c("open minor", "lap minor", "open major", "lap major"), name="Procedure type") + theme_gdocs()
 
 ```
-
-
-#Missing data and imputation
-```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
-
-#Visualise missing data
-library(mi)
-subnew %>% dplyr::select(-primaryM) -> mi.data
-mdf <- missing_data.frame(as.data.frame(mi.data))
-image(mdf)
-detach(mi)
-
-library(mice)
-#Do the imputations
-imp <- mice(as.data.frame(subnew), method="cart", maxit=10)
-imptmp <- complete(imp, "long", include=TRUE)
-imptmp %<>% group_by(.imp, id_patients) %>% mutate(
-    primaryT=first(primaryT),
-    primaryN=first(primaryN),
-    primarytumourgrade=first(primarytumourgrade),
-    primarytreatment=first(primarytreatment))
-imptmp %<>% ungroup() %>% mutate(posmarg = ifelse(margin<1,1,0))
-imptmp$posmarg <- as.factor(imptmp$posmarg)
-imptmp %>% group_by(id_patients) %>% mutate(cumlap = cumsum(lap)) %>% ungroup() -> imptmp
-impmids <- as.mids(as.data.frame(imptmp))
-
-
-```
-
-#PS scores
-```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
-propscores <- vector("list")
-for(i in 1:5) {
-      tmp <- ps(lap~age+sex+CEA+ismajor+difloc+isbilateral+lesionmaxdiameter+lesioncount+primarytumourgrade+primaryT+primaryN+year_primary+primarytreatment, estimand = "ATE", data=complete(impmids,i), interaction.depth=2, n.trees = 10000, shrinkage=0.05, verbose=FALSE, bag.fraction = 0.3, stop.method = "ks.max")
-      propscores[[paste("psate",i,sep="")]] <- tmp
-}
-
-```
-
-
-#Summarise
-```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
-psresults <- vector("list")
-impdata <- vector("list")
-impweights <- vector("list")
-impdata[["psate0"]] <- as.data.frame(subnew)
-  for (i in 1:5) {
-      print(bal.table(propscores[[i]])$ks.max.ATE["ismajor",c("tx.mn", "ct.mn","std.eff.sz", "ks.pval","p")])
-      name <- paste("psate",i,sep="")
-      psresults[[name]] <- propscores[[i]]
-      impdata[[name]] <- complete(impmids,i)
-      impweights[[name]] <- data.frame(weights=stable.weights(propscores[[i]], "ks.max"), treat=propscores[[i]]$treat)
-  }
-
-```
-
-#Plots and balance computations
-```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
-#Make a dataframe from the imputed scores and average the weights
-ave.wt <- as_data_frame(list.map(impweights, weights)) %>% rowMeans()
-
-plotweights <- data.frame(weights=c(unlist(list.map(impweights, weights))), treat=c(unlist(list.map(impweights, treat))), imp=rep(1:5, each=284))
-
-#Boxplot of weights
-ggplot(plotweights, aes(factor(treat), weights, fill=interaction(factor(imp), factor(treat)))) + geom_boxplot() + facet_wrap(~imp)
-#histogram of weights
-ggplot(plotweights, aes(weights, fill=interaction(as.factor(imp), as.factor(treat)))) + geom_histogram() + facet_wrap(~imp)
-
-dx.names <- psresults[[1]]$gbm.obj$var.names
-dx.ave.wt <- dx.wts(ave.wt, data=impdata[[2]], vars=dx.names, estimand="ATE", treat.var = "lap")
-bal.dx.ave.wt <- bal.table(dx.ave.wt)
-bal.dx.ave.wt <-  list(unw=bal.dx.ave.wt$unw, wtd=bal.dx.ave.wt[[2]])
-
-
-#Start building plots
-source("balance_plots.R")
-
-```
-
-
-#Plot/balance output
-```{r, results='asis', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
-knitr::kable(cbind(round(bal.dx.ave.wt$unw[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2), round(bal.dx.ave.wt$wtd[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2)))
-
-balplot
-qqbalplot
-```
-
-#Make large dataframe
-```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
-finaldata <- plyr::rbind.fill(impdata)
-#Combine 2nd and greater number of ops due to small numbers
-finaldata$index <- car::recode(finaldata$index, '2:4=2')
-finaldata$numlap <- car::Recode(finaldata$numlap, '2:4=2')
-finaldata$.imp <- rep(0:5, each=284)
-finaldata$.id <- rep(1:284, times=6)
-
-finaldata <- finaldata %>% group_by(.imp, id_patients) %>% mutate(ctime = ifelse(index<max(index),rtime,cens_time))
-finaldata$stable.w <- ave.wt
-finaldata[finaldata$.imp==0,]$posmarg <- finaldata[finaldata$.imp==1,]$posmarg
-finaldata %>% mutate(gaptime = rtime-time) -> finaldata
-finaldata %>% group_by(.imp) %>% mutate(mhlos = hlos - mean(hlos, na.rm=T)) -> finaldata
-
-#Final imputed mids
-imp.mids <- as.mids(as.data.frame(finaldata), .imp = match(".imp", names(finaldata)), .id=match(".id", names(finaldata)))
-rm(impmids, impweights, imptmp)
-```
-
-#MItools version
-```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
-#mitools version
-library(mitools)
-mit <- impdata[2:6]
-for (i in 1:5) {
-  mit[[i]]$stable.w <- ave.wt
-  mit[[i]]$index <- car::recode(mit[[i]]$index, '2:4=2')
-  mit[[i]]$numlap <- car::Recode(mit[[i]]$numlap, '2:4=2')
-  mit[[i]] <- mit[[i]] %>% group_by(id_patients) %>% mutate(ctime = ifelse(index<max(index),rtime,cens_time))
-  mit[[i]] %>% mutate(gaptime = rtime-time) -> mit[[i]]
-  mit[[i]] %>% mutate(mhlos = hlos-mean(hlos, na.rm=T)) -> mit[[i]]
-}
-
-```
-
-#Survey design parts
-```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
-midata <- imputationList(mit)
-design.ate <- svydesign(ids = ~id_patients, weights=~stable.w, data=midata)
-design.sing <- svydesign(ids = ~id_patients, weights=~stable.w, data=midata$imputations$psate1)
-design.unw <- svydesign(ids = ~id_patients, data=midata)
-```
-
-
 
 #Weighted stats
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}

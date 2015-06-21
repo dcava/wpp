@@ -59,14 +59,14 @@ new <- new %>% mutate(time = cumsum(diff_ops))
 new <- new %>% mutate(rtime = time+rec_gap)
 new <- new %>% mutate(lap = islaparoscopicintent)
 new <- new %>% mutate(cens = os_outcome, rec = pdfs_outcome)
-new <- new %>% mutate(bins = ifelse(rank(index)<max(rank(index)),1,2))
+#new <- new %>% mutate(bins = ifelse(rank(index)<max(rank(index)),1,2))
 
 new <- ungroup(new) %>% mutate(rec = ifelse(pdfs_value==os_value,0,rec))
 new <- new %>% mutate(rec = ifelse(status=="resdis"|status=="unresect", 0, rec))
 
-new <- new %>% group_by(id_patients) %>% mutate(ctime = ifelse(index<max(index),rtime,cens_time))
+#new <- new %>% group_by(id_patients) %>% mutate(ctime = ifelse(index<max(index),rtime,cens_time))
 
-new %<>% mutate(cens_month = round(cens_time/365.25*12, digits = 1), pdfs_month = round(pdfs_value/365.25*12, digits = 1))
+#new %<>% mutate(cens_month = round(cens_time/365.25*12, digits = 1), pdfs_month = round(pdfs_value/365.25*12, digits = 1))
 
 
 #fix sex
@@ -153,5 +153,5 @@ new %<>% ungroup() %>% mutate(posmarg = ifelse(!is.na(new$margin),ifelse(new$mar
 new %<>% mutate(tstage = ifelse(primaryT %in% c(1,2),2,ifelse(primaryT==3,3,ifelse(primaryT==4,4,NA))))
 
 #$Subsetting
-subnew <- new %>% select(age,bloodloss,CEA,hlos,id_patients,isanatomic,isbilateral,isconversion,isextended,ismajor,lesioncount,lesionmaxdiameter, margin,primaryT,primaryN,primaryM,primarytumourgrade,primarytreatment, year_primary,sex, lap, cens_time, cens, index, difloc,cens_month,time,rtime,rec, optime, numlap, ctime, opdate)
-subnew$opdate <- as.numeric(subnew$opdate)
+subnew <- new %>% select(age,bloodloss,CEA,hlos,id_patients,isanatomic,isbilateral,isconversion,isextended,ismajor,lesioncount,lesionmaxdiameter, margin,primaryT,primaryN,primaryM,primarytumourgrade,primarytreatment, year_primary,sex, lap, cens_time, cens, index, difloc,time,rtime,rec,optime)
+

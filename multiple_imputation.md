@@ -66,15 +66,28 @@ MICE approaches MI by "fully conditional specification" that specifies the imput
 
 As each missing variable is modelled separately, a model must be chosen that is appropriate depending on variable type. For example, continous, positive variables may require a Gaussian (normal) model, categorical variables a logistic-based model etc. MICE allows this to be specified for each variable. For simplicity, the current analysis uses the same flexible model for all variables "CART". This is a Classification and Regression Tree model that should now be familiar as being similar to the underlying algorithm in GBM. It copes well with both continous and categorical variables and requires little further tuning.
 
-> As per [Van Buren (Jstat)], there are seven important choices to be made in imputation:
-> 
-> 1. Is the MAR assumption plausible?
-> 2. What form will the imputation model take for each variable?
-> 3. Which variables should act as predictors for the msising data?
-> 4. Should we impute variables that are functions of other variables (eg BMI as a function of height and weight)
-> 5. What order should the variables be imputed?
-> 6. Setup and number of iterations
-> 7. Number of imputed data sets
+For each variable, a set of "predictors" must also be defined that will be used in the model. As a rule, as many available variables should be used and whilst this can be a problem for data with hundreds of variables, it is not an issue in this instance. 
+
+The `mice` package for `R` simplifies many of the steps in MI. It contains functions to assist in predictor selection and diagnostics to ensure the final imputed data sets are sensible.
 
 
+##Multiple imputation with propensity scores
+
+Obviously estimating PS is best with complete cases, although in practice, there is always missing data. This is especialyl the case as PS models usual include a very large number of variables, a complete case analysis could lead to a substantial reduction in sample size, a biased score and subsequently a biased analysis.
+
+Hill et al [Hill et al] explore this topic in their 2004 paper. They present two appraoches to MI + PS analysis. 
+
+Technique 1
+
+1. Generate multiple imputed datasets
+2. For each dataset, calculate the PS
+3. Combine the PS across all the datasets
+4. Pick matched groups/perform weighting and calculate causal estimates
+
+Technique 2
+
+1. Generate multiple imputed datasets
+2. For each dataset, calculate the PS
+3. For each dataset, pick matched groups/perform weighting and calculate causal estimates
+4. Combine causal estimates across the datasets
 
