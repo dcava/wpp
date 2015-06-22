@@ -34,7 +34,7 @@ rm(raw, dif_segs, id_twostage)
 ```
 
 
-#Missing data patterns
+#Heat map of missing data patterns
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 
 #Visualise missing data
@@ -45,10 +45,9 @@ image(mdf)
 detach(package:mi)
 ```
 
-#Imputation
+#Multiple imputation using chained equations
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=TRUE}
 library(mice)
-#Do the imputations
 imp <- mice(as.data.frame(subnew), method="cart", maxit=10)
 ```
 
@@ -66,7 +65,7 @@ impmids <- as.mids(as.data.frame(imptmp))
 
 ```
 
-#PS scores
+#Estimate propensity scores for each imputed dataset
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=TRUE}
 propscores <- vector("list")
 for(i in 1:5) {
@@ -77,7 +76,7 @@ for(i in 1:5) {
 ```
 
 
-#Summarise
+#Consolidate and calculate stabilised weights. Add them to the imputed datasets.
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 psresults <- vector("list")
 impdata <- vector("list")
@@ -86,7 +85,7 @@ impdata[["psate0"]] <- as.data.frame(subnew)
 impdata[["psate0"]]$stable.w <- 1
 
   for (i in 1:5) {
-      print(bal.table(propscores[[i]])$ks.max.ATE["ismajor",c("tx.mn", "ct.mn","std.eff.sz", "ks.pval","p")])
+      #print(bal.table(propscores[[i]])$ks.max.ATE["ismajor",c("tx.mn", "ct.mn","std.eff.sz", "ks.pval","p")])
       name <- paste("psate",i,sep="")
       psresults[[name]] <- propscores[[i]]
       impdata[[name]] <- complete(impmids,i)
@@ -96,33 +95,22 @@ impdata[["psate0"]]$stable.w <- 1
 
 ```
 
-#Plots and balance computations
+#Plots and balance computations for each imputed dataset
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
-#Make a dataframe from the imputed scores and average the weights
-#ave.wt <- as_data_frame(list.map(impweights, weights)) %>% rowMeans()
 
-#plotweights <- data.frame(weights=c(unlist(list.map(impweights, weights))), treat=c(unlist(list.map(impweights, treat))), imp=rep(1:5, each=284), id=c(unlist(list.map(impweights, id))))
-
-#dx.names <- psresults[[1]]$gbm.obj$var.names
-#dx.ave.wt <- dx.wts(ave.wt, data=impdata[[2]], vars=dx.names, estimand="ATE", treat.var = "lap")
-#bal.dx.ave.wt <- bal.table(dx.ave.wt)
-#bal.dx.ave.wt <-  list(unw=bal.dx.ave.wt$unw, wtd=bal.dx.ave.wt[[2]])
-
-
-#Start building plots
-#source("balance_plots.R")
-
+plotweights <- data.frame(weights=c(unlist(list.map(impweights, weights))), treat=c(unlist(list.map(impweights, treat))), imp=rep(1:5, each=284), id=c(unlist(list.map(impweights, id))))
 
 #Boxplot of weights
-#ggplot(plotweights, aes(factor(treat), weights, fill=interaction(factor(imp), factor(treat)))) + geom_boxplot() + facet_wrap(~imp)
+ggplot(plotweights, aes(factor(treat), weights, fill=factor(treat))) + geom_boxplot() + facet_wrap(~imp) + scale_fill_fivethirtyeight(labels = c("Open", "Laparoscopic")) + guides(fill=guide_legend(title=NULL)) + ggtitle("Distribution of stabilised weights for each imputed dataset")+ xlab("") + ylab("Stabilised weights") +  theme_bw() + theme(axis.text.x = element_blank())
+
 #histogram of weights
-#ggplot(plotweights, aes(weights, fill=interaction(as.factor(imp), as.factor(treat)))) + geom_histogram() + facet_wrap(~imp)
+#ggplot(plotweights, aes(weights, fill= as.factor(treat))) + geom_histogram() + facet_wrap(~imp) + scale_fill_fivethirtyeight(labels = c("Open", "Laparoscopic")) + guides(fill=guide_legend(title=NULL)) + ggtitle("Distribution of stabilised weights for each imputed dataset") 
 
 source("new_balance_plots.R")
 ```
 
 
-#New Plot/balance output
+#Balance tables and balance plots for each imputed dataset
 ```{r, results='asis', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 for (i in 1:5) {
   show(kable(cbind(round(ballist[[i]]$unw[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2), round(ballist[[i]]$wtd[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2)), align = 'l'))
@@ -134,15 +122,7 @@ for (i in 1:5) {show(qqplotlist[[i]])}
 ```
 
 
-#Plot/balance output
-```{r, results='asis', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
-# knitr::kable(cbind(round(bal.dx.ave.wt$unw[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2), round(bal.dx.ave.wt$wtd[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2)))
-# 
-# balplot
-# qqbalplot
-```
-
-#Make large dataframe
+#Convert the list of datasets to one large dataframe (for convenience and plotting) and re-create a "mids" object for later use. Generate the conditional/calculated variables. 
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 finaldata <- plyr::rbind.fill(impdata)
 #Combine 2nd and greater number of ops due to small numbers
@@ -165,7 +145,7 @@ imp.mids <- as.mids(as.data.frame(finaldata), .imp = match(".imp", names(finalda
 rm(impmids, impweights, imptmp)
 ```
 
-#MItools version
+#MItools version - this version is necessary for some of the weighted statistics. Same data, slightly different structure to work with a different package.
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 #mitools version
 library(mitools)
@@ -184,7 +164,7 @@ for (i in 1:5) {
 
 ```
 
-#Survey design parts
+#Survey design - these design objects describe the data to the survey package so it can make appropriate adjustments to errors based on the clustering.
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=TRUE}
 midata <- imputationList(mit)
 design.ate <- svydesign(ids = ~id_patients, weights=~stable.w, data=midata)
