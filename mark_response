@@ -1,0 +1,23 @@
+Mark Response:
+
+1.       Can you provide more information on the missing data e.g. for each variable show the % missing
+- Done - table and heatmap in supplement
+
+
+2.       What does a simple comparison of the 2 survival outcomes show?
+- Median f/u = 32 months
+
+
+
+3.       It wasn’t clear why you needed to include recurrent events? Is this for patients who had separate recurrences after separate surgeries?
+
+- Yeah, this turned out to be a big pain in the ass for nothing to be honest. For overall survival, I just did plain KM and Cox PH. A subset of patients had liver recurrences and repeated surgery, most had 2 operations, and a few had 3 or 4. The number of patients having 3 or 4 ended up being too few to be meaningful, so I condensed it down to two different strata - 1 operation or 2+ operations and produced a gaptime model looking at rate of recurrence ofter each operation. The idea was to see if you recurred quicker after you've already had a previous recurrence. There is a trend (33 months to recurence after 1 op, 24 after 2+) but the numbers are still too low to be meaningful.
+
+Does this sound reasonable?
+
+
+4.       Given you say that initially the simple cases are used for laparoscopic surgery, would it be useful to split the data into 2 time periods (e.g. 2000-2007; 2008-2014) and estimate HRs for each time period?
+
+Or alternatively conduct sensitivity analysis using the prospective data only (2004-2014) to estimate the HRs. This would hopefully eliminate bias due to retrospective data collection and minimise selection bias due to initially tending to include the simpler cases for laparoscopic surgery.
+
+- Will go down the sensitivy analysis route I think. The numbers pre-2004 are low compared to after, so I think the pre-2004 estimates will be be quite broad.

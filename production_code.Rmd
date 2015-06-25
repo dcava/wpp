@@ -60,7 +60,7 @@ imptmp %<>% group_by(.imp, id_patients) %>% mutate(
     primarytreatment=first(primarytreatment))
 imptmp %<>% ungroup() %>% mutate(posmarg = ifelse(margin<1,1,0))
 imptmp$posmarg <- as.factor(imptmp$posmarg)
-imptmp %>% group_by(id_patients) %>% mutate(cumlap = cumsum(lap)) %>% ungroup() -> imptmp
+#imptmp %>% group_by(id_patients) %>% mutate(cumlap = cumsum(lap)) %>% ungroup() -> imptmp
 impmids <- as.mids(as.data.frame(imptmp))
 
 ```
@@ -125,8 +125,7 @@ for (i in 1:5) {show(qqplotlist[[i]])}
 #Convert the list of datasets to one large dataframe (for convenience and plotting) and re-create a "mids" object for later use. Generate the conditional/calculated variables. 
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 finaldata <- plyr::rbind.fill(impdata)
-#Combine 2nd and greater number of ops due to small numbers
-finaldata$index <- car::recode(finaldata$index, '2:4=2')
+
 finaldata$.imp <- rep(0:5, each=284)
 finaldata$.id <- rep(1:284, times=6)
 
@@ -134,14 +133,15 @@ finaldata <- finaldata %>% group_by(.imp, id_patients) %>%
   mutate(ctime = ifelse(index<max(index),rtime,cens_time),
          numlap = sum(lap),
          cens_month = round(cens_time/365.25*12, digits = 1),
-         gaptime = rtime-time)
+         gaptime = rtime-time,
+         censrec = ifelse(index<max(index), 0, cens))
 finaldata$numlap <- car::Recode(finaldata$numlap, '2:4=2')
-#finaldata$stable.w <- ave.wt
+finaldata$index <- car::recode(finaldata$index, '2:4=2')
 finaldata[finaldata$.imp==0,]$posmarg <- finaldata[finaldata$.imp==1,]$posmarg
 finaldata %>% group_by(.imp) %>% mutate(mhlos = hlos - mean(hlos, na.rm=T)) -> finaldata
 
 #Final imputed mids
-imp.mids <- as.mids(as.data.frame(finaldata), .imp = match(".imp", names(finaldata)), .id=match(".id", names(finaldata)))
+midata <- as.mids(as.data.frame(finaldata), .imp = match(".imp", names(finaldata)), .id=match(".id", names(finaldata)))
 rm(impmids, impweights, imptmp)
 ```
 
@@ -151,14 +151,14 @@ rm(impmids, impweights, imptmp)
 library(mitools)
 mit <- impdata[2:6]
 for (i in 1:5) {
-  #mit[[i]]$stable.w <- ave.wt
-  mit[[i]]$index <- car::recode(mit[[i]]$index, '2:4=2')
   mit[[i]] %>% group_by(id_patients) %>%
     mutate(ctime = ifelse(index<max(index),rtime,cens_time),
     numlap = sum(lap),
     cens_month = round(cens_time/365.25*12, digits = 1),
-    gaptime = rtime-time) -> mit[[i]]
+    gaptime = rtime-time,
+    censrec = ifelse(index<max(index), 0, cens)) -> mit[[i]]
   mit[[i]]$numlap <- car::Recode(mit[[i]]$numlap, '2:4=2')
+  mit[[i]]$index <- car::recode(mit[[i]]$index, '2:4=2')
   mit[[i]] %>% mutate(mhlos = hlos-mean(hlos, na.rm=T)) -> mit[[i]]
 }
 
@@ -311,27 +311,31 @@ pchisq(X2unw, 1, lower.tail = F)
 #KM survival and follow-up
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 #Median follow-up time by KMPF (reverse kaplan meier)
-medfup <- survfit(Surv(cens_month, cens==0)~1, weights = stable.w, finaldata[finaldata$.imp==1,])
+medfup <- survfit(Surv(cens_month, cens==0)~1, weights = stable.w, midata$imputations$psate1, subset=index==1)
 
 #KM survival by operative approach (in days)- any dataframe is ok
-kmos <- survfit(Surv(time,ctime, cens)~lap+cluster(id_patients), weights = stable.w, finaldata[finaldata$.imp==1,])
+kmos <- survfit(Surv(cens_time, cens)~lap+cluster(id_patients), weights = stable.w, midata$imputations$psate1, subset=index==1)
 
 #5yr OS by group
-fiveyros <- survfit(Surv(time,ctime, cens)~lap, weights = stable.w, finaldata[finaldata$.imp==1,])
+fiveyros <- survfit(Surv(cens_time, cens)~lap+cluster(id_patients), weights = stable.w, midata$imputations$psate1, subset=index==1)
+
+cohortfiveyr <- survfit(Surv(cens_time, cens)~cluster(id_patients), weights = stable.w, midata$imputations$psate1, subset=index==1)
 
 #Logrank - rho=1 gives generalised wilcoxon test, using single dataframe only - 
-lros <- svylogrank(Surv(cens_month, cens)~lap, design=design.sing, rho=1)
+lros <- svylogrank(Surv(cens_time, cens)~lap, design=design.sing, rho=1)
 
 
 #RFS strata by index - gaptime is what we want to know - recurrence after each operation
-rfskm <- survfit(Surv(gaptime, (rec==1|cens==1))~lap + strata(index) +cluster(id_patients), weights = stable.w, finaldata[finaldata$.imp==1,])
+rfskm <- survfit(Surv(gaptime, (rec==1|censrec==1))~lap + strata(index) +cluster(id_patients), weights = stable.w, midata$imputations$psate1)
+
+cohortrfs <- survfit(Surv(gaptime, (rec==1|censrec==1))~strata(index) +cluster(id_patients), weights = stable.w, midata$imputations$psate1)
 
 #logrank
 svylogrank(Surv(gaptime, (rec==1|cens==1))~lap+strata(index), design=design.sing, rho=1)
 
 #compare only the first or only the second procedures - unweighted, but the numbers are the same
-survdiff(Surv(gaptime, (rec==1|cens==1))~lap, finaldata[finaldata$.imp==1,], subset=index==1)
-survdiff(Surv(gaptime, (rec==1|cens==1))~lap, finaldata[finaldata$.imp==1,], subset=index==2)
+survdiff(Surv(gaptime, (rec==1|censrec==1))~lap, midata$imputations$psate1, subset=index==1)
+survdiff(Surv(gaptime, (rec==1|censrec==1))~lap, midata$imputations$psate1, subset=index==2)
 
 ```
 
@@ -353,52 +357,52 @@ kable(data.frame("Approach"=c("Open", "Laparoscopic"), summary(rfskm, times=1826
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 
 #OS
-doublerobust.full <- with(imp.mids, coxph(Surv(time,ctime,cens)~lap+cluster(id_patients)+ismajor+isbilateral+primaryN+lesioncount, weights = stable.w))
+doublerobust.full <- with(midata, coxph(Surv(time,ctime,cens)~lap+cluster(id_patients)+ismajor+isbilateral+primaryN+lesioncount, weights = stable.w))
 
-summary(pool(doublerobust.full))
+summary(MIcombine(doublerobust.full))
 
-doublerobust.final <- with(imp.mids, coxph(Surv(time,ctime,cens)~lap+cluster(id_patients), weights = stable.w))
+doublerobust.final <- with(midata, coxph(Surv(time,ctime,cens)~lap+cluster(id_patients), weights = stable.w))
 
-summary(pool(doublerobust.final))
+summary(MIcombine(doublerobust.final))
 
 #Compare HR for lap
 
 #PDFS - PWP-CT model
-rec_double.full <- with(imp.mids, coxph(Surv(time,rtime,(rec==1|cens==1))~lap+ismajor+isbilateral+primaryN+lesioncount + strata(index), weights = stable.w))
+rec_double.full <- with(midata, coxph(Surv(time,rtime,(rec==1|cens==1))~lap+ismajor+isbilateral+primaryN+lesioncount + strata(index), weights = stable.w))
 
-summary(pool(rec_double.full))
+summary(MIcombine(rec_double.full))
 
-rec_double.final <- with(imp.mids, coxph(Surv(gaptime,(rec==1|cens==1))~lap + strata(index), weights = stable.w))
+rec_double.final <- with(midata, coxph(Surv(gaptime,(rec==1|cens==1))~lap + strata(index), weights = stable.w))
 
-summary(pool(rec_double.final))
+summary(MIcombine(rec_double.final))
 
 
 #OS_multivariate
-doublerobust.mvr  <- with(imp.mids, coxph(Surv(time,ctime,cens)~lap+cluster(id_patients)+ismajor+isbilateral+primaryN+lesioncount+primaryT+bloodloss+mhlos+optime+posmarg, weights = stable.w))
+doublerobust.mvr  <- with(midata, coxph(Surv(time,ctime,cens)~lap+cluster(id_patients)+ismajor+isbilateral+primaryN+lesioncount+primaryT+bloodloss+mhlos+optime+posmarg, weights = stable.w))
 
-summary(pool(doublerobust.mvr))
+summary(MIcombine(doublerobust.mvr))
 
 ########Final multivariate models
 
-os_final <- with(imp.mids, coxph(Surv(time,ctime,cens)~cluster(id_patients)+mhlos+primaryT+lap, weights = stable.w))
+os_final <- with(midata, coxph(Surv(time,ctime,cens)~cluster(id_patients)+mhlos+primaryT+lap, weights = stable.w))
 
-summary(pool(os_final))
+summary(MIcombine(os_final))
 
-rec_doublerobust.mvr <- with(imp.mids, coxph(Surv(gaptime,(rec==1|cens==1))~lap+cluster(id_patients)+ismajor+isbilateral+primaryN+lesioncount+primaryT+bloodloss+mhlos+optime+strata(index), weights = stable.w))
+rec_doublerobust.mvr <- with(midata, coxph(Surv(gaptime,(rec==1|cens==1))~lap+cluster(id_patients)+ismajor+isbilateral+primaryN+lesioncount+primaryT+bloodloss+mhlos+optime+strata(index), weights = stable.w))
 
 #summary(pool(rec_doublerobust.mvr))
 
-rfs_final <- with(imp.mids, coxph(Surv(gaptime, (rec==1|cens==1))~cluster(id_patients)+mhlos+primaryT+isbilateral+lap, weights = stable.w))
+rfs_final <- with(midata, coxph(Surv(gaptime, (rec==1|cens==1))~cluster(id_patients)+mhlos+primaryT+isbilateral+lap, weights = stable.w))
 
 #summary(pool(rfs_final))
 
-os.final.data <- as.data.frame(summary(pool(os_final)))
+os.final.data <- as.data.frame(summary(pool(as.mira(os_final))))
 os.final.data <- os.final.data %>% select(est, `Pr(>|t|)`, `lo 95`, `hi 95`)
 os.final.data %>% mutate(est=exp(est), `lo 95`=exp(`lo 95`), `hi 95` = exp(`hi 95`)) -> os.final.data
 row.names(os.final.data) <- c("hlos", "T2", "T3", "lap")
 
 
-rfs.final.data <- as.data.frame(summary(pool(rfs_final)))
+rfs.final.data <- as.data.frame(summary(pool(as.mira(rfs_final))))
 rfs.final.data <- rfs.final.data %>% select(est, `Pr(>|t|)`, `lo 95`, `hi 95`)
 rfs.final.data %>% mutate(est=exp(est), `lo 95`=exp(`lo 95`), `hi 95` = exp(`hi 95`)) -> rfs.final.data
 row.names(rfs.final.data) <- c("hlos", "T2", "T3", "isbilateral", "lap")

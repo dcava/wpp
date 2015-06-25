@@ -152,6 +152,10 @@ new %<>% group_by(id_patients) %>%
 new %<>% ungroup() %>% mutate(posmarg = ifelse(!is.na(new$margin),ifelse(new$margin<1,1,0),NA))
 new %<>% mutate(tstage = ifelse(primaryT %in% c(1,2),2,ifelse(primaryT==3,3,ifelse(primaryT==4,4,NA))))
 
+#Era
+new %>% mutate(era = ifelse(year(opdate)<2004,0,1)) -> new
+
+
 #$Subsetting
-subnew <- new %>% select(age,bloodloss,CEA,hlos,id_patients,isanatomic,isbilateral,isconversion,isextended,ismajor,lesioncount,lesionmaxdiameter, margin,primaryT,primaryN,primaryM,primarytumourgrade,primarytreatment, year_primary,sex, lap, cens_time, cens, index, difloc,time,rtime,rec,optime)
+subnew <- new %>% select(age,bloodloss,CEA,hlos,id_patients,isanatomic,isbilateral,isconversion,isextended,ismajor,lesioncount,lesionmaxdiameter, margin,primaryT,primaryN,primaryM,primarytumourgrade,primarytreatment, year_primary,sex, lap, cens_time, cens, index, difloc,time,rtime,rec,optime, era)
 
