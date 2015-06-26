@@ -16,7 +16,7 @@ times <- seq(0, max(xlims), by = timeby)
 
 
 ####KM - rfs by index
-rfs_km <- survfit(Surv(gaptime, (rec==1|cens==1))~lap + strata(index) +cluster(id_patients), weights = stable.w, finaldata[finaldata$.imp==1,])
+rfs_km <- survfit(Surv(gaptime, (rec==1|cens==1))~lap + strata(index) +cluster(id_patients), weights = stable.w, midata$imputations$psate1)
 df.rfs <- tidy(rfs_km)
 d <- length(levels(df.rfs$strata))
 
@@ -30,7 +30,7 @@ conf.data$time <- conf.data$time/365.25
 conf.data$strata <- as.factor(conf.data$strata)
 
 #HR
-cox <- exp(summary(pool(rec_double.full))[1,c("est", "lo 95", "hi 95")])
+cox <- exp(summary(pool(as.mira(rec_double.full)))[1,c("est", "lo 95", "hi 95")])
 hr <- paste("HR = ", round(cox[1],2))
 ci <- paste("95% CI: ", round(cox[2],2), "-", round(cox[3],2))
 

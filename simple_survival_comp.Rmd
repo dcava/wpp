@@ -11,11 +11,15 @@ new <- new %>% group_by(id_patients) %>%
   mutate(ctime = ifelse(index<max(index),rtime,cens_time),
          numlap = sum(lap),
          cens_month = round(cens_time/365.25*12, digits = 1),
-         gaptime = rtime-time)
+         gaptime = rtime-time,
+         censrec = ifelse(index<max(index), 0, cens))
+new$ctime <- as.numeric(new$ctime)
 new$numlap <- car::Recode(new$numlap, '2:4=2')
 new$index <- car::recode(new$index, '2:4=2')
-new$posmarg <- new$posmarg
+new %>% ungroup %>% mutate(posmarg = ifelse(margin<1,1,0)) -> new
+new$posmarg <- as.factor(new$posmarg)
 new %>% mutate(mhlos = hlos - mean(hlos, na.rm=T)) -> new
+#new %<>% filter(era ==1)
 ```
 
 #Weighted stats
@@ -54,7 +58,7 @@ survfit(Surv(cens_month, cens==0)~1, new)
 survfit(Surv(cens_month, cens)~lap+cluster(id_patients), data=new)
 
 #5yr OS by group
-summary(survfit(Surv(time,ctime, cens)~lap, new), times=1826.25)
+raw.5os <- summary(survfit(Surv(cens_time, cens)~lap, new, subset=index==1), times=1826.25)
 
 #Logrank - rho=1 gives generalised wilcoxon test, using single dataframe only - 
 lros <- svylogrank(Surv(cens_month, cens)~lap, design=design.sing, rho=1)

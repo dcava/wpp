@@ -5,8 +5,10 @@ Mark Response:
 
 
 2.       What does a simple comparison of the 2 survival outcomes show?
-- Median f/u = 32 months
+- median f/u, median survival, 5yr os/rfs unchanged - just slightly narrower confidence intervals
+- for the cox ph models, there are changes in the magnitude of the parameters, but no change in those that are significant, and no real influence on the treatment parameter
 
+- There were differences in the univariate outcomes which are included in the published manuscript
 
 
 3.       It wasn’t clear why you needed to include recurrent events? Is this for patients who had separate recurrences after separate surgeries?

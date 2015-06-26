@@ -15,7 +15,8 @@ m <- max(nchar(ystratalabs))
 times <- seq(0, max(xlims), by = timeby)
 
 ####Kaplan-Meier
-os_svy <- survfit(Surv(time,ctime, cens)~lap+cluster(id_patients), weights = stable.w, finaldata[finaldata$.imp==1,])
+os_svy <- survfit(Surv(cens_time, cens)~lap+cluster(id_patients), weights = stable.w, midata$imputations$psate1, subset=index==1)
+
 df <- tidy(os_svy)
 df$strata <- as.factor(df$strata)
 d <- length(levels(df$strata))
@@ -30,7 +31,7 @@ conf.data$time <- conf.data$time/365.25
 conf.data$strata <- as.factor(conf.data$strata)
 
 #HR
-cox <- exp(summary(pool(doublerobust.full))[1,c("est", "lo 95", "hi 95")])
+cox <- exp(summary(pool(as.mira(doublerobust.full)))[1,c("est", "lo 95", "hi 95")])
 hr <- paste("HR = ", round(cox[1],2))
 ci <- paste("95% CI: ", round(cox[2],2), "-", round(cox[3],2))
 

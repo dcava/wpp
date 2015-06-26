@@ -1,4 +1,4 @@
-dx.names <- psresults[[1]]$gbm.obj$var.names
+dx.names <- propscores[[1]]$gbm.obj$var.names
 ballist <- vector('list')
 dxlist <- vector('list')
 plotlist <- vector('list')
