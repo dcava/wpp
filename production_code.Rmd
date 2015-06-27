@@ -140,17 +140,16 @@ source("new_balance_plots.R")
 ```{r, results='asis', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 for (i in 1:5) {
   show(kable(cbind(round(ballist[[i]]$unw[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2), round(ballist[[i]]$wtd[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2)), align = 'l', caption = str_c("Dataset number ", i)))
+  show(balplotlist[[i]])
+  show(qqplotlist[[i]])
 }
-
-for (i in 1:5) {show(balplotlist[[i]])}
-for (i in 1:5) {show(qqplotlist[[i]])}
 
 ```
 
 
-#Generate an imputationList object from the data
+#Generate an "imputationList"" object from the data
 
-This will allow the use of mitools to combine the results of analyses from the survey and other packages and account for the imputations using Rubin's rules
+This will allow the use of mitools to combine the results of analyses from the survey and other packages and account for the imputations using Rubin's rules. At this stage, we also construct some new compound variables.
 
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=TRUE}
 
@@ -358,8 +357,6 @@ medfup <- survfit(Surv(cens_month, cens==0)~1, weights = stable.w, midata$imputa
 #KM survival by operative approach (in days)- any dataframe is ok
 kmos <- survfit(Surv(cens_time, cens)~lap+cluster(id_patients), weights = stable.w, midata$imputations$psate1, subset=index==1)
 
-test <- with(midata,survfit(Surv(cens_time, cens)~lap+cluster(id_patients), weights = stable.w, subset=index==1))
-
 cohortfiveyr <- survfit(Surv(cens_time, cens)~cluster(id_patients), weights = stable.w, midata$imputations$psate1, subset=index==1)
 
 #Logrank - rho=1 gives generalised wilcoxon test, using single dataframe only - 
@@ -483,14 +480,6 @@ pool.km5yr <- list.apply(pool.kmos, summary, times=1826.25)
 list.map(list.apply(pool.kmos, summary), table)
 
 
-mi.ci <- function(poolscalar) {
-  df.ps <- with(poolscalar, list(df = df, est = qbar, var=t))
-  mult <- qt(0.95, df=df.ps$df)
-  upper <- round(df.ps$est + mult*sqrt(df.ps$var), 3)
-  lower <- round(df.ps$est - mult*sqrt(df.ps$var), 3)
-  return(str_c("Lower: ", lower, " Est: ", round(df.ps$est,3), " Upper: ", upper))
-}
-
 pool5.open <- pool.scalar(unlist(list.map(pool.km5yr, surv[1])), unlist(list.map(pool.km5yr, std.err[1]^2)), method="rubin")
 
 pool5.lap <- pool.scalar(unlist(list.map(pool.km5yr, surv[2])), unlist(list.map(pool.km5yr, std.err[2]^2)), method="rubin")
@@ -498,5 +487,7 @@ pool5.lap <- pool.scalar(unlist(list.map(pool.km5yr, surv[2])), unlist(list.map(
 mi.ci(pool5.open)
 mi.ci(pool5.lap)
 
-
+#Peto-Peto modification of Gehan-Wilcoxon test
+lros <- with(midata, survdiff(Surv(cens_time, cens)~lap,weights=stable.w, rho=1))
+pool.lrtest <- pool.scalar(list.mapv(lros, chisq), list.mapv(lros, var[1,1]))
 ```
