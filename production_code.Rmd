@@ -329,11 +329,6 @@ posmargunw <- MIcombine(with(design.unw, svyby(~posmarg, ~lap, svyciprop, vartyp
 #Rubins rule
 X2unw <- sum(mapply(function(x) x$statistic, lapply(with(design.unw, svytable(~lap + posmarg, Ntotal = 284, round = T)), prop.test)))/5
 
-#GLM to give odds-ratio and p-val if required - replicant of above really
-#summary(pool(with(imp.mids, glm(margin<1~lap, weights=stable.w, family = binomial))))
-#summary(pool(with(imp.mids, glm(margin<1~lap, family=binomial))))
-
-#--------------------
 ```
 
 #Weighted univariate output
@@ -351,44 +346,117 @@ pander(pchisq(X2unw, 1, lower.tail = F))
 #KM survival and follow-up
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 #Median follow-up time by KMPF (reverse kaplan meier)
-medfup <- survfit(Surv(cens_month, cens==0)~1, weights = stable.w, midata$imputations$psate1, subset=index==1)
+med.fu <- with(midata,survfit(Surv(cens_time, cens==0)~1+cluster(id_patients), weights = stable.w, subset=index==1))
+med.fu %>%
+  list.apply(summary) %>%
+  list.map(table) %>%
+  list.mapv(median) %>%
+  (function (x) {
+    mfu <-round(sum(x)/5/365.25*12, 2)
+    str_c("Median follow-up (reverse KM method): ",mfu," months")
+  }) -> mfu
+
+#KM survival by operative approach (in days)
+#kmos <- survfit(Surv(cens_time, cens)~lap+cluster(id_patients), weights = stable.w, midata$imputations$psate1, subset=index==1)
+
+pool.kmos <- with(midata,survfit(Surv(cens_time, cens)~lap+cluster(id_patients), weights = stable.w, subset=index==1))
+
+#Median OS 
+pool.medos <- pool.km(pool.kmos)
 
 
-#KM survival by operative approach (in days)- any dataframe is ok
-kmos <- survfit(Surv(cens_time, cens)~lap+cluster(id_patients), weights = stable.w, midata$imputations$psate1, subset=index==1)
+#5yr OS
+pool.km5yr <- list.apply(pool.kmos, summary, times=1826.25)
+pool5.open <- pool.scalar(list.mapv(pool.km5yr, surv[1]), list.mapv(pool.km5yr, std.err[1]^2), method="rubin")
+pool5.lap <- pool.scalar(list.mapv(pool.km5yr, surv[2]), list.mapv(pool.km5yr, std.err[2]^2), method="rubin")
+fiveyropen <- mi.ci(pool5.open)
+fiveryrlap <- mi.ci(pool5.lap)
 
-cohortfiveyr <- survfit(Surv(cens_time, cens)~cluster(id_patients), weights = stable.w, midata$imputations$psate1, subset=index==1)
+#Median OS cohort
+cohortmedian <-with(midata,survfit(Surv(cens_time, cens)~cluster(id_patients), weights = stable.w, subset=index==1))
+cohortmedian %>%
+  list.apply(summary) %>%
+  list.map(table) %>%
+  list.mapv(median) %>%
+  {
+    os <-round(sum(.)/5/365.25*12, 2)
+    str_c("Median OS (cohort): ",os," months")
+  } -> cohortmedos
 
 #Logrank - rho=1 gives generalised wilcoxon test, using single dataframe only - 
-lros <- svylogrank(Surv(cens_time, cens)~lap, design=design.sing, rho=1)
+#lros <- svylogrank(Surv(cens_time, cens)~lap, design=design.sing, rho=1)
 
+#Peto-Peto modification of Gehan-Wilcoxon test (log rank), lichtrub p-val test (not perfect)
+lros <- with(design.ate, svylogrank(Surv(cens_time, cens)~lap))
+
+qbarX2 <- sum(unlist(list.select(list.map(lros, list.extract(.,2)),chisq)))/5
+pbar <- unlist(list.select(list.map(lros, list.extract(.,2)),p))
+
+#lichtrubin
+z <- qnorm(pbar)
+num <- mean(z)
+den <- sqrt(1 + var(z))
+pbar <- pnorm( num / den)
+
+qbarX2 <- str_c("Log-rank test (X2=", round(qbarX2,2), " p = ", round(pbar,2), ")")
 
 #RFS strata by index - gaptime is what we want to know - recurrence after each operation
-rfskm <- survfit(Surv(gaptime, (rec==1|censrec==1))~lap + strata(index) +cluster(id_patients), weights = stable.w, midata$imputations$psate1)
+rfskm <- with(midata, survfit(Surv(gaptime, (rec==1|censrec==1))~lap + strata(index) +cluster(id_patients), weights = stable.w))
 
-cohortrfs <- survfit(Surv(gaptime, (rec==1|censrec==1))~strata(index) +cluster(id_patients), weights = stable.w, midata$imputations$psate1)
+pool.km(rfskm)
 
-#logrank
-svylogrank(Surv(gaptime, (rec==1|cens==1))~lap+strata(index), design=design.sing, rho=1)
+cohortrfs <- with(midata, survfit(Surv(gaptime, (rec==1|censrec==1))~strata(index) +cluster(id_patients), weights = stable.w))
+
+pool.km(cohortrfs)
+
+#logrank RFS---------
+lrrfs <- with(design.ate, svylogrank(Surv(gaptime, (rec==1|cens==1))~lap+strata(index)))
+
+qbarX2rfs <- sum(unlist(list.select(list.map(lrrfs, list.extract(.,2)),chisq)))/5
+pbarrfs <- unlist(list.select(list.map(lrrfs, list.extract(.,2)),p))
+
+#lichtrubin
+z <- qnorm(pbarrfs)
+num <- mean(z)
+den <- sqrt(1 + var(z))
+pbarrfs <- pnorm( num / den)
+
+qbarX2rfs <- str_c("Log-rank test (X2=", round(qbarX2rfs,2), " p = ", round(pbarrfs,2), ")")
+#---------------
+
+#5yr RFS
+pool.rfs <- list.apply(rfskm, summary, times=1826.25)
+pool5rfs.open <- pool.scalar(list.mapv(pool.rfs, surv[1]), list.mapv(pool.rfs, std.err[1]^2), method="rubin")
+pool5rfs.lap <- pool.scalar(list.mapv(pool.rfs, surv[2]), list.mapv(pool.rfs, std.err[2]^2), method="rubin")
+fiveyropenrfs <- mi.ci(pool5rfs.open)
+fiveryrlaprfs <- mi.ci(pool5rfs.lap)
 
 #compare only the first or only the second procedures - unweighted, but the numbers are the same
 survdiff(Surv(gaptime, (rec==1|censrec==1))~lap, midata$imputations$psate1, subset=index==1)
 survdiff(Surv(gaptime, (rec==1|censrec==1))~lap, midata$imputations$psate1, subset=index==2)
+
+
 
 ```
 
 #KM output
 ```{r, results='asis', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 #Median FU
-pander::pandoc.table(summary(medfup)$table[5:7], caption = "Median follow-up")
-#OS
-pander(summary(kmos, scale=365.25/12)$table, caption = "Kaplan-Meier OS")
-kable(data.frame("Approach"=c("Open", "Laparoscopic"), summary(kmos, times=1826.25)[c(1,9,11,12)]), digits = 2, caption = "5yr OS")
-pander::pandoc.table(lros[[2]], caption="Generalised Wilcoxon test, OS")
-#RFS
-pander::pandoc.table(summary(rfskm, scale=365.25/12)$table, caption = "Kaplan-Meier RFS")
-kable(data.frame("Approach"=c("Open", "Laparoscopic"), summary(rfskm, times=1826.25)[c(9,11,12)]), digits = 2, caption = "5yr RFS")
+pander(mfu)
 
+#OS
+pander(pool.medos)
+pander(qbarX2)
+pander(cohortmedos)
+pander(str_c("Open ", fiveyropen))
+pander(str_c("Laparoscopic ", fiveryrlap))
+
+#Median RFS 
+pander(pool.km(rfskm), caption = "Kaplan-Meier RFS")
+pander(qbarX2rfs)
+#5yr RFS
+pander(str_c("Open ", fiveyropenrfs))
+pander(str_c("Laparoscopic ", fiveryrlaprfs))
 ```
 
 #Weighted regression
@@ -473,21 +541,22 @@ rfs_curve
 
 #Pooling KM stuff
 ```{r}
-pool.kmos <- with(midata,survfit(Surv(cens_time, cens)~lap+cluster(id_patients), weights = stable.w, subset=index==1))
-
-pool.km5yr <- list.apply(pool.kmos, summary, times=1826.25)
-
-list.map(list.apply(pool.kmos, summary), table)
 
 
-pool5.open <- pool.scalar(unlist(list.map(pool.km5yr, surv[1])), unlist(list.map(pool.km5yr, std.err[1]^2)), method="rubin")
 
-pool5.lap <- pool.scalar(unlist(list.map(pool.km5yr, surv[2])), unlist(list.map(pool.km5yr, std.err[2]^2)), method="rubin")
+#Median OS
+pool.kmos %>%
+  list.apply(summary) %>%
+  list.map(table) %>%
+  
+  (function (x) {
+    
+    os <-round(sum(x)/5/365.25*12, 2)
+    str_c("Median OS: ",os," months")
+  }) -> kmos
+  list.map(list.apply(pool.kmos, summary), table)
+  
 
-mi.ci(pool5.open)
-mi.ci(pool5.lap)
 
-#Peto-Peto modification of Gehan-Wilcoxon test
-lros <- with(midata, survdiff(Surv(cens_time, cens)~lap,weights=stable.w, rho=1))
-pool.lrtest <- pool.scalar(list.mapv(lros, chisq), list.mapv(lros, var[1,1]))
+
 ```
