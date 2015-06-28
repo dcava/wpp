@@ -23,15 +23,12 @@ d <- length(levels(df$strata))
 
 ###Data for confidence bars
 timesci <- seq(0,max(os_svy$time), by= timeby*2)
-conf.data <- summary(os_svy, times=timesci)
-conf.data <- as.data.frame(matrix(c(unlist(conf.data[c("time", "surv", "lower", "upper", "strata")])), nrow = 14))
-conf.data <- conf.data[c(2,3,4,5,9,10,11,12),]
-colnames(conf.data) <- c("time", "survival", "lower", "upper", "strata")
-conf.data$time <- conf.data$time/365.25
-conf.data$strata <- as.factor(conf.data$strata)
+conf.data <- summary(os_svy, times=timesci, scale=365.25)
+conf.data <- with(list.flatten(conf.data), data.frame(time=time, survival=surv, lower=lower, upper=upper, strata=strata))
+conf.data <- conf.data %>% filter(time!=0)
 
 #HR
-cox <- exp(summary(pool(as.mira(doublerobust.full)))[1,c("est", "lo 95", "hi 95")])
+cox <- exp(spm(doublerobust.full)[1,c("est", "lo 95", "hi 95")])
 hr <- paste("HR = ", round(cox[1],2))
 ci <- paste("95% CI: ", round(cox[2],2), "-", round(cox[3],2))
 

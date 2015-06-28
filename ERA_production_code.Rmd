@@ -42,6 +42,7 @@ The dataset is imported and tidied, interim datasets are removed.
 ```{r, results='hide', warning=FALSE, error=FALSE, message=FALSE, echo=TRUE, cache=TRUE}
 source("data_tidying.R")
 rm(raw, dif_segs, id_twostage)
+subnew %<>% filter(era==1)
 
 ```
 
@@ -139,7 +140,7 @@ source("new_balance_plots.R")
 #Balance tables and balance plots for each imputed dataset
 ```{r, results='asis', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 for (i in 1:5) {
-  show(pander(cbind(round(ballist[[i]]$unw[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2), round(ballist[[i]]$wtd[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2)), align = 'l', caption = str_c("Dataset number ", i), style="rmarkdown"))
+  show(kable(cbind(round(ballist[[i]]$unw[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2), round(ballist[[i]]$wtd[,c("tx.mn", "ct.mn","std.eff.sz", "p")],2)), align = 'l', caption = str_c("Dataset number ", i)))
   show(balplotlist[[i]])
   show(qqplotlist[[i]])
 }
@@ -185,6 +186,7 @@ new$index <- car::recode(new$index, '2:4=2')
 new %>% ungroup %>% mutate(posmarg = ifelse(margin<1,1,0)) -> new
 new$posmarg <- as.factor(new$posmarg)
 new %>% mutate(mhlos = hlos - mean(hlos, na.rm=T)) -> new
+new %<>% filter(era==1)
 ```
 
 #Survey design
@@ -356,6 +358,8 @@ med.fu %>%
     str_c("Median follow-up (reverse KM method): ",mfu," months")
   }) -> mfu
 
+#KM survival by operative approach (in days)
+#kmos <- survfit(Surv(cens_time, cens)~lap+cluster(id_patients), weights = stable.w, midata$imputations$psate1, subset=index==1)
 
 pool.kmos <- with(midata,survfit(Surv(cens_time, cens)~lap+cluster(id_patients), weights = stable.w, subset=index==1))
 
@@ -438,23 +442,19 @@ survdiff(Surv(gaptime, (rec==1|censrec==1))~lap, midata$imputations$psate1, subs
 ```
 
 #KM output
-
-
-
-
 ```{r, results='asis', warning=FALSE, error=FALSE, message=FALSE, echo=FALSE}
 #Median FU
-mfu
+pander(mfu)
 
 #OS
-pander(pool.medos, style="rmarkdown")
-qbarX2
+pander(pool.medos)
+pander(qbarX2)
 pander(cohortmedos)
-str_c("Open ", fiveyropen, "\n")
-str_c("Laparoscopic ", fiveryrlap)
+pander(str_c("Open ", fiveyropen))
+pander(str_c("Laparoscopic ", fiveryrlap))
 
 #Median RFS 
-pander(pool.km(rfskm), caption = "Kaplan-Meier RFS", style="rmarkdown")
+pander(pool.km(rfskm), caption = "Kaplan-Meier RFS")
 pander(qbarX2rfs)
 #5yr RFS
 pander(str_c("Open ", fiveyropenrfs))
@@ -495,7 +495,7 @@ mvr.os.raw <- coxph(Surv(time, ctime,censrec)~lap+cluster(id_patients)+ismajor+i
 
 mvr.rfs <- with(midata, coxph(Surv(gaptime,(rec==1|censrec==1))~lap+cluster(id_patients)+ismajor+isbilateral+primaryN+lesioncount+primaryT+bloodloss+mhlos+optime+strata(index)+posmarg, weights = stable.w))
 
-mvr.rfs.raw <- coxph(Surv(gaptime,(rec==1|censrec==1))~lap+cluster(id_patients)+ismajor+isbilateral+primaryN+lesioncount+primaryT+bloodloss+mhlos+optime+strata(index)+posmarg, data=new)
+mvr.rfs.raw<- coxph(Surv(gaptime,(rec==1|censrec==1))~lap+cluster(id_patients)+ismajor+isbilateral+primaryN+lesioncount+primaryT+bloodloss+mhlos+optime+strata(index)+posmarg, data=new)
 #------------------------------
 
 ########Final multivariate models
@@ -525,13 +525,14 @@ pander(spm(rec_double.full)) #full Rfs doublerobust
 pander(spm(rec_double.final)) #final rfs double robust
 
 pander(spm(mvr.os)) #full os multivar 
-pander(mvr.os.raw) #full rfs multivar
-pander(spm(mvr.rfs))
-pander(mvr.rfs.raw)
+pander(spm(mvr.rfs)) #full rfs multivar
+pander(summary(mvr.os.raw))
+pander(summary(mvr.rfs.raw))
 
 pander(spm(os_final)) #final os multivar
 pander(spm(rfs_final)) #final rfs multivar
-
+pander(raw.os.final)
+pander(raw.rfs.final)
 ```
 
 

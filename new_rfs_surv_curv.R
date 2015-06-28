@@ -22,17 +22,10 @@ d <- length(levels(df.rfs$strata))
 
 ###Data for confidence bars
 timesci <- seq(0,max(rfs_km$time), by= timeby*2)
-conf.data <- summary(rfs_km, times=timesci)
-conf.data <- as.data.frame(matrix(c(unlist(conf.data[c("time", "surv", "lower", "upper", "strata")])), nrow =  19))
-conf.data <- conf.data[-c(1,6,7,8,11,16,17,18),]
-colnames(conf.data) <- c("time", "survival", "lower", "upper", "strata")
-conf.data$time <- conf.data$time/365.25
-conf.data$strata <- as.factor(conf.data$strata)
+conf.data <- summary(rfs_km, times=timesci, scale=365.25)
+conf.data <- with(list.flatten(conf.data), data.frame(time=time, survival=surv, lower=lower, upper=upper, strata=strata))
+conf.data <- conf.data %>% filter(time!=0)
 
-#HR
-cox <- exp(summary(pool(as.mira(rec_double.full)))[1,c("est", "lo 95", "hi 95")])
-hr <- paste("HR = ", round(cox[1],2))
-ci <- paste("95% CI: ", round(cox[2],2), "-", round(cox[3],2))
 
 ######
 #Plot#
@@ -56,6 +49,4 @@ rfs_curve <- ggplot() +
   theme(plot.margin = unit(c(0, 1, .5,ifelse(m < 10, 1.5, 2.5)),"lines")) +
   ggtitle("Recurrence free survival (Kaplan-Meier estimate)") + 
   geom_errorbar(data=conf.data, aes(x=time*365.25, ymin=(1-lower), ymax=(1-upper), linetype=strata, colour=strata), width=1, position=position_dodge(width = 40)) + 
-  geom_point(data=conf.data, aes(x=time*365.25, y=1-survival, shape=strata), position = position_dodge(width = 40)) +
-  annotate("text",x = 0.6 * 1826.25,y = 0.35,label = hr, size=3) +
-  annotate("text",x = 0.6 * 1826.25,y = 0.33,label = ci, size=3)
+  geom_point(data=conf.data, aes(x=time*365.25, y=1-survival, shape=strata), position = position_dodge(width = 40)) 
