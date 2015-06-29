@@ -55,3 +55,15 @@ pool.km <- function(km.mira.object) {
   data.frame(results)
   }
 
+pool.5yr <- function(km.mira.object) {
+  results <- vector("list")
+  for (i in c("surv", "std.err")){
+    km.mira.object %>%
+      list.apply(summary, times=1826.25) %>% 
+      list.select(i) %>% 
+      list.flatten() %>% 
+      list.rbind() %>% 
+      data.frame() -> results[[i]]
+  }
+ results
+}

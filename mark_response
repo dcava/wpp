@@ -23,3 +23,7 @@ Does this sound reasonable?
 Or alternatively conduct sensitivity analysis using the prospective data only (2004-2014) to estimate the HRs. This would hopefully eliminate bias due to retrospective data collection and minimise selection bias due to initially tending to include the simpler cases for laparoscopic surgery.
 
 - Will go down the sensitivy analysis route I think. The numbers pre-2004 are low compared to after, so I think the pre-2004 estimates will be be quite broad.
+
+- At the end of the supplement, I made a hazard ratio plot for OS and RFS with the "raw" data, the full, weighted, imputed dataset and the >2004 era weighted, imputed data set with a brief discussion - is this sufficient?
+
+I added some more figures for the missing data analysis and tried to generally clean things up a bit. 
