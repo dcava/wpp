@@ -1,4 +1,4 @@
-library(grid)
+#library(grid)
 library(scales)
 library(broom)
 
@@ -39,21 +39,24 @@ ci <- paste("95% CI: ", round(cox[2],2), "-", round(cox[3],2))
 os_curve <- ggplot() +
   geom_step(data=df, aes(time, (1-estimate), linetype = strata), size = 0.7) +
   theme_bw() +
-  theme(axis.title.x = element_text(vjust = 0.5)) +
   scale_x_continuous(xlabs, breaks = times, limits = xlims, labels=c("0", "1", "2", "3", "4", "5", "6", "7", "8", "9","10")) +
   scale_y_continuous("Percent died", limits = c(0, 1), labels=percent) +
   scale_linetype_manual(labels = c("Open", "Laparoscopic"), breaks=c("lap=0", "lap=1"), values=c(1,2,1,2)) +
   scale_shape_discrete(guide=FALSE) +
   scale_colour_manual(guide=FALSE, values=c("grey40", "grey40")) +
-  theme(panel.grid.minor = element_blank()) +
-  theme(legend.position = c(ifelse(m < 10, .1, .2),ifelse(d < 4, 0.8, .3))) +    # MOVE LEGEND HERE [first is x dim, second is y dim]
-  theme(legend.key = element_rect(colour = NA)) +
-  theme(legend.text = element_text(size=rel(1.5))) + 
+  theme(panel.grid.minor = element_blank(),
+        legend.position = c(ifelse(m < 10, .1, .2),ifelse(d < 4, 0.8, .3)),
+        # MOVE LEGEND HERE [first is x dim, second is y dim]
+        legend.key = element_rect(colour = NA),
+        legend.text = element_text(size=rel(1.5)),
+        plot.margin = unit(c(0, 1, .5,ifelse(m < 10, 1.5, 2.5)),"lines"),
+        axis.title.x = element_text(vjust = 0.5),
+        title = element_text(size=rel(1.75)),
+        axis.title = element_text(size=rel(1.15)),
+        axis.text = element_text(size=rel(1.7))) +
   labs(linetype = ystrataname) +
-  theme(plot.margin = unit(c(0, 1, .5,ifelse(m < 10, 1.5, 2.5)),"lines")) +
-  ggtitle("Overall survival (Kaplan-Meier estimate)") + 
+  ggtitle("Cumulative percent mortality") + 
   geom_errorbar(data=conf.data, aes(x=time*365.25, ymin=(1-lower), ymax=(1-upper), linetype=strata, colour=strata), width=1, position=position_dodge(width = 40)) +
   geom_point(data=conf.data, aes(time*365.25, 1-survival, shape=strata), position = position_dodge(width = 40)) +
-  annotate("text",x = 0.8 * 3652.5,y = 0.15,label = hr, size=rel(4.5)) +
-  annotate("text",x = 0.8 * 3652.5,y = 0.12,label = ci, size=rel(4.5))
-
+  annotate("text",x = 0.8 * 3652.5,y = 0.15,label = hr, size=rel(6)) +
+  annotate("text",x = 0.8 * 3652.5,y = 0.12,label = ci, size=rel(6))

@@ -3,18 +3,34 @@ spm <- function(impresults) {
 }
 
 plotdf <- function (impresult) {
-  plotout <- tidy(spm(impresult))
-  plotout %>%
+  if (class(impresult)=="coxph") {
+    plotout <- tidy(impresult)
+    plotout %<>%
+      select(
+        term,
+        estimate, 
+        conf.low, 
+        conf.high,
+        std.error = robust.se,
+        p.value)
+    return(plotout)
+  } else {
+    plotout <- data.frame(spm(impresult))
+    plotout %<>%
     transmute(
-      est=exp(est), 
-      lo.95=exp(lo.95), 
-      hi.95 = exp(hi.95), 
+      term = rownames(plotout),
+      estimate=est, 
+      conf.low=lo.95, 
+      conf.high = hi.95,
+      std.error = se,
+      p.value = `Pr...t..`,
       fmi=round(fmi, 2))
-  row.names(plotout) <- plotout$.rownames
   return(plotout)
+}
 }
 
 mi.ci <- function(poolscalar) {
+  #Take the pooled scalar values for survival and generate 95% CIs
   df.ps <- with(poolscalar, list(df = df, est = qbar, var=t))
   mult <- qt(0.95, df=df.ps$df)
   upper <- round(df.ps$est + mult*sqrt(df.ps$var), 3)
@@ -66,4 +82,81 @@ pool.5yr <- function(km.mira.object) {
       data.frame() -> results[[i]]
   }
  results
+}
+
+cavcombine <- function(dk, df, display = TRUE) 
+  #dk = vector of chi-squared values, df = degrees of freedom
+  #My variant of the miceadds::micombine.chisquare function
+{
+  M <- length(dk)
+  mean.dk <- mean(dk)
+  sdk.square <- var(sqrt(dk))
+  Dval <- (mean.dk/df - (1 - 1/M) * sdk.square)/(1 + (1 + 1/M) * 
+                                                   sdk.square)
+  df2 <- (M - 1)/df^(3/M) * (1 + M/(M + 1/M)/sdk.square)^2
+  pval <- pf(Dval, df1 = df, df2 = df2, lower.tail = F)
+  chisq.approx <- Dval * df
+  p.approx <- 1 - pchisq(chisq.approx, df = df)
+  res <- c(D = Dval, p = pval, df = df, df2 = df2, chisq.approx = chisq.approx, 
+           p.approx = p.approx)
+  if (display) {
+    message("Combination of Chi Square Statistics for Multiply Imputed Data\n")
+    message(paste("Using", M, "Imputed Data Sets\n"))
+    message(paste("F(", df, ",", round(df2, 2), ")", "=", 
+                  round(Dval, 3), "     p=", round(pval, 5), sep = ""), "\n")
+    message(paste("Chi Square Approximation Chi2(", df, ")", 
+                  "=", round(chisq.approx, 3), "     p=", round(p.approx, 
+                                                                5), sep = ""), "\n")
+  }
+  invisible(res)
+}
+
+summary.MIresult<-function(object,...,alpha=0.05, logeffect=FALSE){
+  #My version of the MIresult summary function, easy to use with knitr
+  #message("Multiple imputation results:\n")
+  #lapply(object$call, function(a) {cat("      ");print(a)})
+  out<-data.frame(results=coef(object), se=sqrt(diag(vcov(object))))
+  crit<-qt(alpha/2,object$df, lower.tail=FALSE)
+  out$"(lower"<-out$results-crit*out$se
+  out$"upper)"<-out$results+crit*out$se
+  out$"missInfo" <-paste(round(100*object$missinfo), "%")
+  return(out)
+}
+
+stable.weights <- function (ps1, stop.method = NULL, estimand = NULL) 
+{
+  if (class(ps1) == "ps") {
+    if (is.null(estimand)) 
+      estimand <- ps1$estimand
+    if (!(estimand %in% c("ATT", "ATE"))) 
+      stop("estimand must be either \"ATT\" or \"ATE\".")
+    if (estimand != ps1$estimand) {
+      warning("Estimand specified for get.weights() differs from the estimand used to fit the ps object.")
+    }
+    if (length(stop.method) > 1) 
+      stop("More than one stop.method was selected.")
+    if (!is.null(stop.method)) {
+      stop.method.long <- paste(stop.method, ps1$estimand, 
+                                sep = ".")
+      i <- match(stop.method.long, names(ps1$w))
+      if (is.na(i)) 
+        stop("Weights for stop.method=", stop.method, 
+             " and estimand=", estimand, " are not available. Please a stop.method and used when fitting the ps object.")
+    }
+    else {
+      warning("No stop.method specified.  Using ", names(ps1$ps)[1], 
+              "\n")
+      
+      i <- 1
+    }
+    if (estimand == "ATT") {
+      w <- with(ps1, treat + (1 - treat) * ps[[i]]/(1 - 
+                                                      ps[[i]]))
+      return(w)
+    }
+    else if (estimand == "ATE") {
+      w <- with(ps1, ifelse(treat==1, (mean(ps[[i]]))/ps[[i]], (mean(1-ps[[i]]))/(1-ps[[i]])))
+      return(w)
+    }
+  }
 }
