@@ -3,7 +3,6 @@
 .Rhistory
 .RData
 *.docx
-*.html
 *.plist
 *.pdf
 *.png
