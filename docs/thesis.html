@@ -1,4 +1,15 @@
-<h1 id="thesis">Thesis</h1>
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <meta name="description" content="Inverse Probability of Treatment Weighting using Propensity Scores : Supplement to &quot;Long-term Survival in Laparoscopic vs Open Resection for Colorectal Liver Metastases: Inverse Probability of Treatment Weighting using Propensity Scores&quot;">
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+    <title>Thesis</title>
+  </head>
+
 <p>This is a near final markdown version of the submitted thesis.</p>
 <h1 id="preface">Preface</h1>
 <h2 id="role">Role</h2>
@@ -225,3 +236,4 @@
 <h2 id="weighted-multiply-imputed-data">Weighted, multiply imputed data</h2>
 <p>Following missing data management and propensity score generation, we are presented with five imputed, weighted datasets to analyse instead of the usual one. Additionally, any analysis must now take into account the additinal variance introduced by both MI and PS. Thankfully, software exists that makes this process relatively straightforward. Using the <code>survey</code> and <code>mitools</code> packages for <code>R</code>, we can create a survey design that takes into account the clustered nature of the PS dataset and will create the appropriate design for each individual dataset and wrap it up into a coherent object. When that object is used for further analysis, the package can combine the results of indivudal analysis with the appropriate adjustments (Rubin’s rules) for multiple imputation.</p>
 <hr />
+</html>
