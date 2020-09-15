@@ -82,7 +82,7 @@ new$bpi[is.na(new$primaryN)] <- NA
 new$bpi[is.na(new$primarytumourgrade)] <- NA
 new$bpi[is.na(new$CEA)] <- NA
 
-#correct the few data entry errors
+#correct the few data entry errors from excel sheet
 new[new$id_patients==339,"status"] <- "nrd"
 new[new$id_patients==339,"rec"] <- 0
 new[new$id_patients==350,][2,"status"] <- "nrd"
