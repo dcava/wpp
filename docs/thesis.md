@@ -78,8 +78,6 @@ Long-term Survival in Laparoscopic vs Open Resection for Colorectal
 Liver Metastases: Inverse Probability of Treatment Weighting using
 Propensity Scores
 
-## Brisbane, 2014-15
-
 # Context:
 
 This work was completed as a multi-centre, hospital-based observational clinical trial to answer a long-standing question regarding the safety of laparoscopic (keyhole) liver surgery for metastatic colorectal cancer. It arose out of the need to provide the best possible answer to this question in the absence of a randomised controlled trial.
@@ -157,12 +155,12 @@ In this setting, a PS analysis divides the process in two. First, the selection 
 
 A full PS based analysis involves a number of steps:
 
-##1. Identify the important covariates over which balance must be obtained
-##2. Select the estimand of interest (ATE or ATT) 
-##3. Use an appropriate modelling technique to derive the PS from the data
-##4. Select the technique through which the samples will be compared (matching, stratification, IPTW, covariate adjustment, CBPS, etc)
-##5. Check the balance obtained using appropriate metrics
-##6. Estimate the treatment effect
+## 1. Identify the important covariates over which balance must be obtained
+## 2. Select the estimand of interest (ATE or ATT) 
+## 3. Use an appropriate modelling technique to derive the PS from the data
+## 4. Select the technique through which the samples will be compared (matching, stratification, IPTW, covariate adjustment, CBPS, etc)
+## 5. Check the balance obtained using appropriate metrics
+## 6. Estimate the treatment effect
 
 Research into the use of PS in medical literature shows a rapid increase in its use - understandably given the potential benefits - but most authors do not provide sufficient information related to the above steps, particularly 1-5. The bulk of the medical literature focusses on the methods of estimating the treatment effect, the parameter of most clinical interest (eg survival, risk ratio, etc). The absence of information regarding the PS model specification means the reader is limited in their ability to assess the validity and generalisability of this effect.
 
