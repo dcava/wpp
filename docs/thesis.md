@@ -390,10 +390,4 @@ Following missing data management and propensity score generation, we are presen
 
 ---
 
-# Appendix B
-# Code and working analysis
-
-
-
-
 [1]:	https://github.com/dcava/wpp
